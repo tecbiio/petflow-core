@@ -23,7 +23,40 @@
 
 ## Description
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+Backend NestJS + Prisma (SQLite) avec produits, stocks, inventaires et mouvements.
+
+## Prisma & données
+
+- `.env` pointe vers `DATABASE_URL="file:./dev.db"`.
+- Migrations : `npm run prisma:migrate` (puis `npx prisma generate` si besoin).
+- Seed de données : `npm run prisma:seed`.
+- Vérification CLI produits : `npm run products:cli`.
+
+## API principales (REST)
+
+Produits  
+- `GET /products` : liste des produits.  
+- `GET /products/:id` : détail produit.
+
+Stock locations  
+- `GET /stock-locations` : liste.  
+- `GET /stock-locations/:id` : détail.  
+- `GET /stock-locations/default` : localisation par défaut (`isDefault=true`).
+
+Stock movements  
+- `GET /stock-movements/product/:productId`  
+- `GET /stock-movements/stock-location/:stockLocationId`  
+- `GET /stock-movements/date/:date` (date ISO, journée entière).
+
+Inventaires  
+- `GET /inventories/product/:productId`  
+- `GET /inventories/stock-location/:stockLocationId`  
+- `GET /inventories/date/:date`
+
+Stock (calculé à la volée)  
+- `GET /stock/:productId` : stock courant (dernier inventaire + mouvements après, ou somme des mouvements si aucun inventaire).  
+- `GET /stock/:productId/at/:date` : stock à une date.  
+- `GET /stock/:productId/variations` : mouvements du produit (ordre décroissant).
 
 ## Project setup
 

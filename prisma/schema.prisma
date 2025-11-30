@@ -1,0 +1,54 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Product {
+  id                Int       @id @default(autoincrement())
+  name              String
+  description       String?
+  price             Decimal
+  sku               String    @unique
+  axonautProductId  Int?      @unique
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  stockMovements    StockMovement[]
+  inventories       Inventory[]
+}
+
+model StockLocation {
+  id                Int       @id @default(autoincrement())
+  code              String    @unique
+  name              String
+  isDefault         Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  stockMovements    StockMovement[]
+  inventories       Inventory[]
+}
+
+model StockMovement {
+  id                Int       @id @default(autoincrement())
+  productId         Int
+  product           Product    @relation(fields: [productId], references: [id])
+  stockLocationId   Int
+  stockLocation     StockLocation @relation(fields: [stockLocationId], references: [id])
+  quantityDelta     Int
+  reason            String    @default("UNKNOWN")
+  createdAt         DateTime  @default(now())
+}
+
+model Inventory {
+  id                Int       @id @default(autoincrement())
+  productId         Int
+  product           Product    @relation(fields: [productId], references: [id])
+  stockLocationId   Int
+  stockLocation     StockLocation @relation(fields: [stockLocationId], references: [id])
+  quantity          Int
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
