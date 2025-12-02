@@ -7,6 +7,7 @@ import { StockLocationsModule } from './stock-locations/stock-locations.module';
 import { StockMovementsModule } from './stock-movements/stock-movements.module';
 import { InventoriesModule } from './inventories/inventories.module';
 import { StockModule } from './stock/stock.module';
+import { HusseModule } from './husse/husse.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { StockModule } from './stock/stock.module';
     StockMovementsModule,
     InventoriesModule,
     StockModule,
+    HusseModule,
   ],
   controllers: [AppController],
   providers: [AppService],
