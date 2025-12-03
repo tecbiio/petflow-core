@@ -8,6 +8,8 @@ import { StockMovementsModule } from './stock-movements/stock-movements.module';
 import { InventoriesModule } from './inventories/inventories.module';
 import { StockModule } from './stock/stock.module';
 import { HusseModule } from './husse/husse.module';
+import { AxonautModule } from './axonaut/axonaut.module';
+import { DocumentsModule } from './documents/documents.module';
 
 @Module({
   imports: [
@@ -18,6 +20,8 @@ import { HusseModule } from './husse/husse.module';
     InventoriesModule,
     StockModule,
     HusseModule,
+    AxonautModule,
+    DocumentsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
