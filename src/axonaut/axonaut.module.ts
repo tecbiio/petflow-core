@@ -5,5 +5,6 @@ import { AxonautService } from './axonaut.service';
 @Module({
   providers: [AxonautService],
   controllers: [AxonautController],
+  exports: [AxonautService],
 })
 export class AxonautModule {}

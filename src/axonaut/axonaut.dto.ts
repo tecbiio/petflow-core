@@ -1,7 +1,7 @@
 export class AxonautConfigDto {
-  baseUrl: string;
   apiKey: string;
-  updateStockUrlTemplate: string;
+  baseUrl?: string;
+  updateStockUrlTemplate?: string;
   lookupProductsUrlTemplate?: string;
 }
 
@@ -14,4 +14,11 @@ export class AxonautUpdateStockDto {
 
 export class AxonautLookupDto {
   references: string[];
+}
+
+export class AxonautTestRequestDto {
+  url?: string;
+  path?: string;
+  method?: 'GET' | 'POST' | 'PATCH';
+  body?: unknown;
 }

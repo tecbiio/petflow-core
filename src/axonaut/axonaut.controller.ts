@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Post } from '@nestjs/common';
-import { AxonautConfigDto, AxonautLookupDto, AxonautUpdateStockDto } from './axonaut.dto';
+import { AxonautConfigDto, AxonautLookupDto, AxonautTestRequestDto, AxonautUpdateStockDto } from './axonaut.dto';
 import { AxonautService } from './axonaut.service';
 
 @Controller('axonaut')
@@ -13,7 +13,7 @@ export class AxonautController {
   }
 
   @Get('config')
-  getConfig() {
+  async getConfig() {
     return this.axonautService.getConfig();
   }
 
@@ -25,5 +25,10 @@ export class AxonautController {
   @Post('lookup')
   lookup(@Body() dto: AxonautLookupDto) {
     return this.axonautService.lookup(dto);
+  }
+
+  @Post('test-request')
+  testRequest(@Body() dto: AxonautTestRequestDto) {
+    return this.axonautService.testRequest(dto);
   }
 }
