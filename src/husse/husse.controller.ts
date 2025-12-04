@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Post } from '@nestjs/common';
-import { HusseFetchDto, HusseLoginDto } from './husse.dto';
+import { HusseConfigDto, HusseFetchDto, HusseLoginDto } from './husse.dto';
 import { HusseService } from './husse.service';
 
 @Controller('husse')
@@ -10,6 +10,17 @@ export class HusseController {
   async login(@Body() dto: HusseLoginDto) {
     await this.husseService.login(dto);
     return { ok: true };
+  }
+
+  @Post('config')
+  setConfig(@Body() dto: HusseConfigDto) {
+    this.husseService.setConfig(dto);
+    return { ok: true };
+  }
+
+  @Get('config')
+  getConfig() {
+    return this.husseService.getConfig();
   }
 
   @Get('session')

@@ -46,7 +46,6 @@ export class ProductsService {
       description: dto.description ?? null,
       price: dto.price,
       isActive: dto.isActive ?? true,
-      axonautProductId: dto.axonautProductId ?? null,
     };
   }
 
@@ -70,9 +69,6 @@ export class ProductsService {
     }
     if (dto.isActive !== undefined) {
       data.isActive = dto.isActive;
-    }
-    if (dto.axonautProductId !== undefined) {
-      data.axonautProductId = dto.axonautProductId ?? null;
     }
 
     if (Object.keys(data).length === 0) {

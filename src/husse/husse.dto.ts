@@ -7,3 +7,8 @@ export class HusseLoginDto {
 export class HusseFetchDto {
   urls: string[];
 }
+
+export class HusseConfigDto {
+  username: string;
+  password: string;
+}

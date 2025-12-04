@@ -7,6 +7,14 @@ import type { CreateInventoryDto } from './inventories.dto';
 export class InventoriesService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async findAll(filter?: { productId?: number }): Promise<Inventory[]> {
+    const where: Prisma.InventoryWhereInput = {};
+    if (filter?.productId !== undefined) {
+      where.productId = filter.productId;
+    }
+    return this.prisma.inventory.findMany({ where, orderBy: { createdAt: 'desc' } });
+  }
+
   async findByProductId(productId: number): Promise<Inventory[]> {
     return this.prisma.inventory.findMany({
       where: { productId },

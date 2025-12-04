@@ -10,9 +10,6 @@ type ResolvedConfig = {
   updateStockUrlTemplate: string;
   lookupProductsUrlTemplate: string;
 };
-const AXO_BASE_URL = 'https://axonaut.com';
-const AXO_UPDATE_TEMPLATE = '/api/v2/products/{product_id}/stock';
-const AXO_LOOKUP_TEMPLATE = '/api/v2/products?reference={reference}';
 export type AxonautProduct = {
   id?: string | number;
   code?: string;
@@ -36,7 +33,9 @@ export class AxonautService {
       throw new Error('apiKey est requise');
     }
     this.config = this.withDefaults(dto);
-    this.saveToDisk(dto.apiKey).catch((err) => this.logger.warn(`Impossible de persister la config Axonaut: ${err}`));
+    this.saveToDisk(dto.apiKey).catch((err) =>
+      this.logger.warn(`Impossible de persister la config Axonaut: ${err}`),
+    );
     this.logger.log('Configuration Axonaut mise à jour en mémoire.');
   }
 
@@ -50,7 +49,7 @@ export class AxonautService {
   async updateStock(dto: AxonautUpdateStockDto) {
     const config = await this.ensureConfig();
     const { baseUrl, apiKey, updateStockUrlTemplate } = config;
-    const url = this.interpolate(updateStockUrlTemplate ?? AXO_UPDATE_TEMPLATE, dto.productId);
+    const url = this.interpolate(updateStockUrlTemplate ?? '/api/v2/products/{product_id}/stock', dto.productId);
 
     const body: Record<string, unknown> = {};
     if (dto.quantity !== undefined) body.quantity = dto.quantity;
@@ -89,7 +88,7 @@ export class AxonautService {
   async fetchProductsCatalog(): Promise<{ products: AxonautProduct[]; total?: number; pages?: number; perPage?: number }> {
     const config = await this.ensureConfig();
 
-    const productsUrl = this.getProductsUrl(config.lookupProductsUrlTemplate ?? AXO_LOOKUP_TEMPLATE);
+    const productsUrl = this.getProductsUrl(config.lookupProductsUrlTemplate ?? '/api/v2/products?reference={reference}');
     const baseUrl = this.normalize(config.baseUrl, productsUrl);
     const headers = { userApiKey: config.apiKey };
 
@@ -121,7 +120,7 @@ export class AxonautService {
   async lookup(dto: AxonautLookupDto) {
     const config = await this.ensureConfig();
     const { baseUrl, apiKey } = config;
-    const lookupTemplate = config.lookupProductsUrlTemplate ?? AXO_LOOKUP_TEMPLATE;
+    const lookupTemplate = config.lookupProductsUrlTemplate ?? '/api/v2/products?reference={reference}';
     const results: Record<string, { id?: string | number; raw?: unknown }> = {};
 
     for (const reference of dto.references) {
@@ -340,11 +339,14 @@ export class AxonautService {
   }
 
   private withDefaults(dto: AxonautConfigDto): ResolvedConfig {
+    const baseUrl = dto.baseUrl ?? 'https://axonaut.com';
+    const updateStockUrlTemplate = dto.updateStockUrlTemplate ?? '/api/v2/products/{product_id}/stock';
+    const lookupProductsUrlTemplate = dto.lookupProductsUrlTemplate ?? '/api/v2/products?reference={reference}';
     return {
       apiKey: dto.apiKey,
-      baseUrl: dto.baseUrl ?? AXO_BASE_URL,
-      updateStockUrlTemplate: dto.updateStockUrlTemplate ?? AXO_UPDATE_TEMPLATE,
-      lookupProductsUrlTemplate: dto.lookupProductsUrlTemplate ?? AXO_LOOKUP_TEMPLATE,
+      baseUrl,
+      updateStockUrlTemplate,
+      lookupProductsUrlTemplate,
     };
   }
 

@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { HusseFetchDto, HusseLoginDto } from './husse.dto';
+import { HusseConfigDto, HusseFetchDto, HusseLoginDto } from './husse.dto';
+import * as fs from 'fs';
+import * as path from 'path';
 
 /**
  * Service minimaliste pour interagir avec l'extranet Husse en gardant un cookie de session en mémoire.
@@ -9,7 +11,13 @@ import { HusseFetchDto, HusseLoginDto } from './husse.dto';
 @Injectable()
 export class HusseService {
   private readonly logger = new Logger(HusseService.name);
+  private readonly configPath = process.env.HUSSE_CONFIG_PATH || path.resolve(process.cwd(), 'tmp', 'husse-config.json');
   private cookieHeader: string | null = null;
+  private config: { username: string; password: string } | null = null;
+
+  constructor() {
+    void this.loadFromDisk();
+  }
 
   async login(payload: HusseLoginDto): Promise<void> {
     const { baseUrl, username, password } = payload;
@@ -81,6 +89,22 @@ export class HusseService {
     this.cookieHeader = null;
   }
 
+  setConfig(dto: HusseConfigDto) {
+    if (!dto.username || !dto.password) {
+      throw new Error('username et password sont requis');
+    }
+    this.config = { username: dto.username, password: dto.password };
+    this.saveToDisk(dto).catch((err) => this.logger.warn(`Impossible de persister la config Husse: ${err}`));
+    this.logger.log('Configuration Husse sauvegardée');
+  }
+
+  async getConfig() {
+    if (!this.config) {
+      await this.loadFromDisk();
+    }
+    return this.config;
+  }
+
   private buildCookieHeader(cookies: string[]): string {
     return cookies
       .map((raw) => raw.split(';')[0])
@@ -91,5 +115,27 @@ export class HusseService {
   private looksLikeLogin(body: string): boolean {
     const lower = body.toLowerCase();
     return lower.includes('co_email') || lower.includes('co_pass') || lower.includes('connexion') || lower.includes('login');
+  }
+
+  private async loadFromDisk() {
+    try {
+      const data = await fs.promises.readFile(this.configPath, 'utf-8');
+      const parsed = JSON.parse(data) as { username?: string; password?: string };
+      if (parsed.username && parsed.password) {
+        this.config = { username: parsed.username, password: parsed.password };
+        this.logger.log(`Configuration Husse chargée depuis ${this.configPath}`);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  private async saveToDisk(dto: HusseConfigDto) {
+    try {
+      await fs.promises.mkdir(path.dirname(this.configPath), { recursive: true });
+      await fs.promises.writeFile(this.configPath, JSON.stringify(dto, null, 2), 'utf-8');
+    } catch (err) {
+      this.logger.warn(`Échec d'écriture de la config Husse: ${err}`);
+    }
   }
 }

@@ -7,6 +7,14 @@ import { CreateStockMovementDto } from './stock-movements.dto';
 export class StockMovementsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async findAll(filter?: { productId?: number }): Promise<StockMovement[]> {
+    const where: Prisma.StockMovementWhereInput = {};
+    if (filter?.productId !== undefined) {
+      where.productId = filter.productId;
+    }
+    return this.prisma.stockMovement.findMany({ where, orderBy: { createdAt: 'desc' } });
+  }
+
   async findByProductId(productId: number): Promise<StockMovement[]> {
     return this.prisma.stockMovement.findMany({
       where: { productId },

@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Param, ParseIntPipe, Post, Put } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, ParseIntPipe, Post, Put, Query } from '@nestjs/common';
 import { StockMovement } from '@prisma/client';
 import type { CreateStockMovementDto } from './stock-movements.dto';
 import { StockMovementsService } from './stock-movements.service';
@@ -6,6 +6,18 @@ import { StockMovementsService } from './stock-movements.service';
 @Controller('stock-movements')
 export class StockMovementsController {
   constructor(private readonly stockMovementsService: StockMovementsService) {}
+
+  @Get()
+  async list(@Query('productId') productId?: string): Promise<StockMovement[]> {
+    let parsedProductId: number | undefined;
+    if (productId !== undefined) {
+      parsedProductId = Number(productId);
+      if (!Number.isInteger(parsedProductId) || parsedProductId <= 0) {
+        throw new BadRequestException('productId must be a positive integer');
+      }
+    }
+    return this.stockMovementsService.findAll(parsedProductId ? { productId: parsedProductId } : undefined);
+  }
 
   @Get('product/:productId')
   async byProduct(@Param('productId', ParseIntPipe) productId: number): Promise<StockMovement[]> {
