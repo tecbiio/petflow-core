@@ -1,5 +1,6 @@
-import { BadRequestException, Controller, Get, Param, ParseIntPipe } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, ParseIntPipe, Put } from '@nestjs/common';
 import { Inventory } from '@prisma/client';
+import type { CreateInventoryDto } from './inventories.dto';
 import { InventoriesService } from './inventories.service';
 
 @Controller('inventories')
@@ -25,5 +26,10 @@ export class InventoriesController {
       throw new BadRequestException('Invalid date format, expected ISO-like date string');
     }
     return this.inventoriesService.findByDate(parsed);
+  }
+
+  @Put()
+  async create(@Body() dto: CreateInventoryDto): Promise<Inventory> {
+    return this.inventoriesService.create(dto);
   }
 }

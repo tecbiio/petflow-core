@@ -1,5 +1,6 @@
-import { BadRequestException, Controller, Get, Param, ParseIntPipe } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, ParseIntPipe, Post, Put } from '@nestjs/common';
 import { StockMovement } from '@prisma/client';
+import type { CreateStockMovementDto } from './stock-movements.dto';
 import { StockMovementsService } from './stock-movements.service';
 
 @Controller('stock-movements')
@@ -25,5 +26,19 @@ export class StockMovementsController {
       throw new BadRequestException('Invalid date format, expected ISO-like date string');
     }
     return this.stockMovementsService.findByDate(parsed);
+  }
+
+  @Put()
+  async create(@Body() dto: CreateStockMovementDto): Promise<StockMovement> {
+    return this.stockMovementsService.createOne(dto);
+  }
+
+  @Post('bulk')
+  async createBulk(@Body() dtos: CreateStockMovementDto[]): Promise<{ created: number; movements: StockMovement[] }> {
+    if (!Array.isArray(dtos)) {
+      throw new BadRequestException('Expected an array of stock movements');
+    }
+    const movements = await this.stockMovementsService.createMany(dtos);
+    return { created: movements.length, movements };
   }
 }

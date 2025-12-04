@@ -37,21 +37,28 @@ Backend NestJS + Prisma (SQLite) avec produits, stocks, inventaires et mouvement
 Produits  
 - `GET /products` : liste des produits.  
 - `GET /products/:id` : détail produit.
+- `PUT /products` : création (name, sku, price, description?).  
+- `PATCH /products/:id` : mise à jour partielle (name?, sku?, price?, description?, isActive?, axonautProductId?).
 
 Stock locations  
 - `GET /stock-locations` : liste.  
 - `GET /stock-locations/:id` : détail.  
 - `GET /stock-locations/default` : localisation par défaut (`isDefault=true`).
+- `PUT /stock-locations` : création (name, code, isDefault?, isActive?).  
+- `PATCH /stock-locations/:id` : mise à jour partielle (name?, code?, isDefault?, isActive?).
 
 Stock movements  
 - `GET /stock-movements/product/:productId`  
 - `GET /stock-movements/stock-location/:stockLocationId`  
-- `GET /stock-movements/date/:date` (date ISO, journée entière).
+- `GET /stock-movements/date/:date` (date ISO, journée entière).  
+- `PUT /stock-movements` : crée un mouvement (productId, stockLocationId, quantityDelta, reason?, createdAt?).  
+- `POST /stock-movements/bulk` : crée plusieurs mouvements en une fois (tableau des mêmes payloads).
 
 Inventaires  
 - `GET /inventories/product/:productId`  
 - `GET /inventories/stock-location/:stockLocationId`  
 - `GET /inventories/date/:date`
+- `PUT /inventories` : création d'un inventaire (productId, stockLocationId, quantity, createdAt?).
 
 Stock (calculé à la volée)  
 - `GET /stock/:productId` : stock courant (dernier inventaire + mouvements après, ou somme des mouvements si aucun inventaire).  
