@@ -4,6 +4,7 @@ import type { Express } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
 import { DocumentType } from '../common/enums/document-type.enum';
+import { StockMovementReason } from '../common/enums/stock-movement-reason.enum';
 import { PrismaService } from '../prisma/prisma.service';
 import { IngestDocumentDto, ParsedLine } from './documents.dto';
 import { AxonautProduct, AxonautService } from '../axonaut/axonaut.service';
@@ -64,11 +65,12 @@ export class DocumentsService {
       if (resolution.linkedAxonaut) productsLinked += 1;
 
       const delta = this.deltaFromDocType(dto.docType, line.quantity);
+      const movementReason = this.reasonFromDocType(dto.docType);
       createdMovements.push({
         productId: resolution.product.id,
         stockLocationId: locationId,
         quantityDelta: delta,
-        reason: `import:${dto.docType.toLowerCase()}`,
+        reason: movementReason,
         sourceDocumentType: dto.docType,
         sourceDocumentId: dto.sourceDocumentId,
       });
@@ -244,6 +246,17 @@ export class DocumentsService {
         return abs;
       default:
         return quantity;
+    }
+  }
+
+  private reasonFromDocType(docType: DocumentType): StockMovementReason {
+    switch (docType) {
+      case DocumentType.FACTURE:
+        return StockMovementReason.FACTURE;
+      case DocumentType.AVOIR:
+        return StockMovementReason.AVOIR;
+      default:
+        return StockMovementReason.DON;
     }
   }
 

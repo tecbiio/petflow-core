@@ -1,5 +1,6 @@
 import { BadRequestException, Body, Controller, Get, Param, ParseIntPipe, Post, Put, Query } from '@nestjs/common';
 import { StockMovement } from '@prisma/client';
+import { StockMovementReason } from '../common/enums/stock-movement-reason.enum';
 import type { CreateStockMovementDto } from './stock-movements.dto';
 import { StockMovementsService } from './stock-movements.service';
 
@@ -8,15 +9,25 @@ export class StockMovementsController {
   constructor(private readonly stockMovementsService: StockMovementsService) {}
 
   @Get()
-  async list(@Query('productId') productId?: string): Promise<StockMovement[]> {
+  async list(
+    @Query('productId') productId?: string,
+    @Query('reason') reason?: StockMovementReason | StockMovementReason[],
+  ): Promise<StockMovement[]> {
     let parsedProductId: number | undefined;
     if (productId !== undefined) {
       parsedProductId = Number(productId);
       if (!Number.isInteger(parsedProductId) || parsedProductId <= 0) {
-        throw new BadRequestException('productId must be a positive integer');
+        throw new BadRequestException('productId doit être un entier positif');
       }
     }
-    return this.stockMovementsService.findAll(parsedProductId ? { productId: parsedProductId } : undefined);
+
+    const reasonsFilter = this.normalizeReasons(reason);
+
+    const filter: { productId?: number; reasons?: StockMovementReason[] } = {};
+    if (parsedProductId) filter.productId = parsedProductId;
+    if (reasonsFilter.length > 0) filter.reasons = reasonsFilter;
+
+    return this.stockMovementsService.findAll(filter);
   }
 
   @Get('product/:productId')
@@ -52,5 +63,26 @@ export class StockMovementsController {
     }
     const movements = await this.stockMovementsService.createMany(dtos);
     return { created: movements.length, movements };
+  }
+
+  private normalizeReasons(input?: StockMovementReason | StockMovementReason[]): StockMovementReason[] {
+    if (input === undefined || input === null) return [];
+    const values = Array.isArray(input) ? input : [input];
+    const normalized = values
+      .map((value) => String(value).trim().toUpperCase())
+      .filter((v) => v.length > 0) as StockMovementReason[];
+
+    if (normalized.length === 0) return [];
+
+    const allowed = new Set(Object.values(StockMovementReason));
+    const invalid = normalized.filter((reason) => !allowed.has(reason));
+    if (invalid.length > 0) {
+      throw new BadRequestException(
+        `reason doit être parmi: ${Object.values(StockMovementReason).join(', ')}`,
+      );
+    }
+
+    // Déduplication pour éviter des conditions inutiles
+    return Array.from(new Set(normalized)) as StockMovementReason[];
   }
 }

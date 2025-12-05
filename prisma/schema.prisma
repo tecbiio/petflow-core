@@ -40,7 +40,7 @@ model StockMovement {
   stockLocationId   Int
   stockLocation     StockLocation @relation(fields: [stockLocationId], references: [id])
   quantityDelta     Int
-  reason            String    @default("UNKNOWN")
+  reason            String    @default("INCONNU")
   sourceDocumentType String?
   sourceDocumentId   String?
   createdAt         DateTime  @default(now())

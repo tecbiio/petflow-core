@@ -1,8 +1,8 @@
 export enum StockMovementReason {
-  PURCHASE = 'PURCHASE',
-  SALE = 'SALE',
-  RETURN = 'RETURN',
-  ADJUSTMENT = 'ADJUSTMENT',
-  TRANSFER = 'TRANSFER',
-  UNKNOWN = 'UNKNOWN',
+  FACTURE = 'FACTURE',
+  AVOIR = 'AVOIR',
+  PERTE = 'PERTE',
+  CASSE = 'CASSE',
+  DON = 'DON',
+  INCONNU = 'INCONNU',
 }

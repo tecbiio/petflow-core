@@ -2,15 +2,19 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { Prisma, StockMovement } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateStockMovementDto } from './stock-movements.dto';
+import { StockMovementReason } from '../common/enums/stock-movement-reason.enum';
 
 @Injectable()
 export class StockMovementsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(filter?: { productId?: number }): Promise<StockMovement[]> {
+  async findAll(filter?: { productId?: number; reasons?: StockMovementReason[] }): Promise<StockMovement[]> {
     const where: Prisma.StockMovementWhereInput = {};
     if (filter?.productId !== undefined) {
       where.productId = filter.productId;
+    }
+    if (filter?.reasons && filter.reasons.length > 0) {
+      where.reason = { in: filter.reasons };
     }
     return this.prisma.stockMovement.findMany({ where, orderBy: { createdAt: 'desc' } });
   }
