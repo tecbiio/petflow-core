@@ -15,12 +15,37 @@ model Product {
   sku               String
   isActive          Boolean   @default(true)
   axonautProductId  Int?
+  familyId          Int?
+  subFamilyId       Int?
+  family            Family?   @relation(fields: [familyId], references: [id])
+  subFamily         SubFamily? @relation(fields: [subFamilyId], references: [id])
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   stockMovements    StockMovement[]
   inventories       Inventory[]
   @@unique([sku])
   @@unique([axonautProductId])
+}
+
+model Family {
+  id          Int         @id @default(autoincrement())
+  name        String      @unique
+  products    Product[]
+  subFamilies SubFamily[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model SubFamily {
+  id        Int       @id @default(autoincrement())
+  name      String
+  familyId  Int
+  family    Family    @relation(fields: [familyId], references: [id])
+  products  Product[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([familyId, name])
 }
 
 model StockLocation {

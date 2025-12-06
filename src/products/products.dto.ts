@@ -4,6 +4,8 @@ export type UpsertProductDto = {
   description?: string | null;
   price: number;
   isActive?: boolean;
+  familyId?: number | null;
+  subFamilyId?: number | null;
 };
 
 export type UpdateProductDto = Partial<UpsertProductDto>;

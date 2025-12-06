@@ -1,5 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { HusseConfigDto, HusseFetchDto, HusseLoginDto } from './husse.dto';
+import { HusseConfigDto, HusseFetchDto, HusseImportDto, HusseLoginDto } from './husse.dto';
+import { HUSSE_BASE_URL, HUSSE_LOGIN_URL, HUSSE_PRODUCT_URLS } from './husse.constants';
+import { parseProductsFromPages, ScrapedProduct } from './husse.parser';
+import { PrismaService } from '../prisma/prisma.service';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -12,56 +15,18 @@ import * as path from 'path';
 export class HusseService {
   private readonly logger = new Logger(HusseService.name);
   private readonly configPath = process.env.HUSSE_CONFIG_PATH || path.resolve(process.cwd(), 'tmp', 'husse-config.json');
+  private readonly allowedBaseOrigin = new URL(HUSSE_BASE_URL).origin;
+  private readonly loginUrl = HUSSE_LOGIN_URL;
   private cookieHeader: string | null = null;
   private config: { username: string; password: string } | null = null;
   private allowedOrigin: string | null = null;
 
-  constructor() {
+  constructor(private readonly prisma: PrismaService) {
     void this.loadFromDisk();
   }
 
   async login(payload: HusseLoginDto): Promise<void> {
-    const { username, password } = payload;
-
-    let parsed: URL;
-    try {
-      parsed = new URL(payload.baseUrl);
-    } catch {
-      throw new Error('baseUrl invalide');
-    }
-    if (!['http:', 'https:'].includes(parsed.protocol)) {
-      throw new Error('baseUrl doit être http(s)');
-    }
-
-    const response = await fetch(parsed.toString(), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        co_email: username,
-        co_pass: password,
-        rester_connecte: '1',
-      }),
-      redirect: 'manual',
-    });
-
-    if (!response.ok && response.status !== 302) {
-      const text = await response.text();
-      throw new Error(`Login Husse échoué: ${response.status} ${response.statusText} – ${text.slice(0, 200)}`);
-    }
-
-    const setCookie = response.headers.getSetCookie?.() ?? [];
-    if (setCookie.length === 0) {
-      const fallback = response.headers.get('set-cookie');
-      if (fallback) setCookie.push(fallback);
-    }
-
-    if (setCookie.length === 0) {
-      throw new Error('Login Husse: aucun cookie reçu');
-    }
-
-    this.cookieHeader = this.buildCookieHeader(setCookie);
-    this.allowedOrigin = parsed.origin;
-    this.logger.log('Cookie Husse mis à jour');
+    await this.performLogin(payload.username, payload.password, payload.baseUrl);
   }
 
   async fetchPages(dto: HusseFetchDto): Promise<{ pages: { url: string; html: string }[]; encounteredLoginPage: boolean }> {
@@ -105,6 +70,24 @@ export class HusseService {
     return { pages, encounteredLoginPage };
   }
 
+  async importProducts(dto: HusseImportDto) {
+    const credentials = await this.resolveCredentials(dto);
+    await this.performLogin(credentials.username, credentials.password, this.loginUrl);
+
+    const { pages, encounteredLoginPage: loginPageOnFetch } = await this.fetchPages({
+      urls: [...HUSSE_PRODUCT_URLS],
+    });
+    const scraped = parseProductsFromPages(pages.map((page) => page.html));
+    const encounteredLoginPage = scraped.encounteredLoginPage || loginPageOnFetch;
+
+    const summary = await this.upsertProducts(scraped.products);
+
+    return {
+      ...summary,
+      encounteredLoginPage,
+    };
+  }
+
   sessionStatus() {
     return { hasCookie: !!this.cookieHeader };
   }
@@ -130,6 +113,107 @@ export class HusseService {
     return { hasCredentials: !!this.config };
   }
 
+  private async resolveCredentials(dto?: HusseImportDto) {
+    if (dto?.username && dto?.password) {
+      return { username: dto.username, password: dto.password };
+    }
+    if (!this.config) {
+      await this.loadFromDisk();
+    }
+    if (!this.config) {
+      throw new Error('Identifiants Husse manquants. Renseignez-les dans les réglages.');
+    }
+    return this.config;
+  }
+
+  private async performLogin(username: string, password: string, baseUrl?: string) {
+    const targetUrl = this.resolveBaseUrl(baseUrl);
+
+    const response = await fetch(targetUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        co_email: username,
+        co_pass: password,
+        rester_connecte: '1',
+      }),
+      redirect: 'manual',
+    });
+
+    if (!response.ok && response.status !== 302) {
+      const text = await response.text();
+      throw new Error(`Login Husse échoué: ${response.status} ${response.statusText} – ${text.slice(0, 200)}`);
+    }
+
+    const setCookie = response.headers.getSetCookie?.() ?? [];
+    if (setCookie.length === 0) {
+      const fallback = response.headers.get('set-cookie');
+      if (fallback) setCookie.push(fallback);
+    }
+
+    if (setCookie.length === 0) {
+      throw new Error('Login Husse: aucun cookie reçu');
+    }
+
+    this.cookieHeader = this.buildCookieHeader(setCookie);
+    this.allowedOrigin = this.allowedBaseOrigin;
+    this.logger.log('Cookie Husse mis à jour');
+  }
+
+  private async upsertProducts(products: ScrapedProduct[]) {
+    const prisma = this.prisma.client();
+    let created = 0;
+    let updated = 0;
+    let skipped = 0;
+
+    for (const product of products) {
+      const sku = product.reference.trim();
+      const name = product.name.trim();
+      if (!sku || !name) {
+        skipped += 1;
+        continue;
+      }
+
+      const description = this.buildDescription(product);
+      const price = this.parsePrice(product.priceLabel);
+      const familyId = await this.ensureFamily(product.classification?.global);
+      const subFamilyId = await this.ensureSubFamily(familyId, product.classification?.group);
+      const existing = await prisma.product.findUnique({ where: { sku } });
+
+      if (existing) {
+        await prisma.product.update({
+          where: { sku },
+          data: {
+            name,
+            description,
+            price: price ?? Number(existing.price),
+            isActive: true,
+            familyId,
+            subFamilyId,
+          },
+        });
+        updated += 1;
+      } else {
+        await prisma.product.create({
+          data: {
+            sku,
+            name,
+            description,
+            price: price ?? 0,
+            isActive: true,
+            familyId,
+            subFamilyId,
+          },
+        });
+        created += 1;
+      }
+    }
+
+    this.logger.log(`Import Husse: ${products.length} produits parsés, ${created} créés, ${updated} mis à jour, ${skipped} ignorés.`);
+
+    return { total: products.length, created, updated, skipped };
+  }
+
   private buildCookieHeader(cookies: string[]): string {
     return cookies
       .map((raw) => raw.split(';')[0])
@@ -137,9 +221,65 @@ export class HusseService {
       .join('; ');
   }
 
+  private parsePrice(raw?: string | null): number | null {
+    if (!raw) return null;
+    const normalised = raw.replace(/\s+/g, '').replace(',', '.');
+    const match = normalised.match(/-?\d+(?:\.\d+)?/);
+    if (!match) return null;
+    const value = Number.parseFloat(match[0]);
+    return Number.isFinite(value) ? value : null;
+  }
+
+  private buildDescription(product: ScrapedProduct): string | null {
+    const parts = [
+      product.classification?.global?.trim(),
+      product.classification?.group?.trim(),
+      product.unitLabel?.trim(),
+    ].filter(Boolean);
+    if (parts.length === 0) return null;
+    return parts.join(' / ');
+  }
+
+  private async ensureFamily(name?: string | null) {
+    const value = name?.trim();
+    if (!value) return null;
+    const prisma = this.prisma.client();
+    const existing = await prisma.family.findUnique({ where: { name: value } });
+    if (existing) return existing.id;
+    const created = await prisma.family.create({ data: { name: value } });
+    return created.id;
+  }
+
+  private async ensureSubFamily(familyId: number | null, name?: string | null) {
+    const value = name?.trim();
+    if (!familyId || !value) return null;
+    const prisma = this.prisma.client();
+    const existing = await prisma.subFamily.findUnique({ where: { familyId_name: { familyId, name: value } } });
+    if (existing) return existing.id;
+    const created = await prisma.subFamily.create({ data: { name: value, familyId } });
+    return created.id;
+  }
+
   private looksLikeLogin(body: string): boolean {
     const lower = body.toLowerCase();
     return lower.includes('co_email') || lower.includes('co_pass') || lower.includes('connexion') || lower.includes('login');
+  }
+
+  private resolveBaseUrl(baseUrl?: string) {
+    const target = baseUrl?.trim() || this.loginUrl;
+    let parsed: URL;
+    try {
+      parsed = new URL(target);
+    } catch {
+      throw new Error('baseUrl invalide');
+    }
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      throw new Error('baseUrl doit être http(s)');
+    }
+    if (parsed.origin !== this.allowedBaseOrigin) {
+      throw new Error(`URL Husse non autorisée (${parsed.origin}). Domaine attendu : ${this.allowedBaseOrigin}`);
+    }
+    return parsed.toString();
   }
 
   private async loadFromDisk() {

@@ -1,5 +1,5 @@
 export class HusseLoginDto {
-  baseUrl: string;
+  baseUrl?: string;
   username: string;
   password: string;
 }
@@ -11,4 +11,9 @@ export class HusseFetchDto {
 export class HusseConfigDto {
   username: string;
   password: string;
+}
+
+export class HusseImportDto {
+  username?: string;
+  password?: string;
 }

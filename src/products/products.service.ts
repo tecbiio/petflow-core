@@ -1,20 +1,40 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, Product } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { UpsertProductDto, UpdateProductDto } from './products.dto';
+
+const productInclude = {
+  family: true,
+  subFamily: {
+    include: {
+      family: true,
+    },
+  },
+} satisfies Prisma.ProductInclude;
 
 @Injectable()
 export class ProductsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(): Promise<Product[]> {
+  async findAll(filter?: { active?: boolean; familyId?: number; subFamilyId?: number }) {
     const prisma = this.prisma.client();
-    return prisma.product.findMany({ orderBy: { createdAt: 'desc' } });
+    const where: Prisma.ProductWhereInput = {};
+    if (filter?.active !== undefined) {
+      where.isActive = filter.active;
+    }
+    if (filter?.familyId) {
+      where.familyId = filter.familyId;
+    }
+    if (filter?.subFamilyId) {
+      where.subFamilyId = filter.subFamilyId;
+    }
+
+    return prisma.product.findMany({ where, orderBy: { createdAt: 'desc' }, include: productInclude });
   }
 
-  async findOne(id: number): Promise<Product> {
+  async findOne(id: number) {
     const prisma = this.prisma.client();
-    const product = await prisma.product.findUnique({ where: { id } });
+    const product = await prisma.product.findUnique({ where: { id }, include: productInclude });
 
     if (!product) {
       throw new NotFoundException(`Product ${id} not found`);
@@ -23,20 +43,20 @@ export class ProductsService {
     return product;
   }
 
-  async create(dto: UpsertProductDto): Promise<Product> {
+  async create(dto: UpsertProductDto) {
     const data = this.toCreateInput(dto);
     const prisma = this.prisma.client();
-    return prisma.product.create({ data });
+    return prisma.product.create({ data, include: productInclude });
   }
 
-  async update(id: number, dto: UpdateProductDto): Promise<Product> {
+  async update(id: number, dto: UpdateProductDto) {
     const prisma = this.prisma.client();
     const existing = await prisma.product.findUnique({ where: { id } });
     if (!existing) {
       throw new NotFoundException(`Product ${id} not found`);
     }
     const data = this.toUpdateInput(dto);
-    return prisma.product.update({ where: { id }, data });
+    return prisma.product.update({ where: { id }, data, include: productInclude });
   }
 
   private toCreateInput(dto: UpsertProductDto): Prisma.ProductCreateInput {
@@ -50,6 +70,8 @@ export class ProductsService {
       description: dto.description ?? null,
       price: dto.price,
       isActive: dto.isActive ?? true,
+      family: dto.familyId ? { connect: { id: dto.familyId } } : undefined,
+      subFamily: dto.subFamilyId ? { connect: { id: dto.subFamilyId } } : undefined,
     };
   }
 
@@ -73,6 +95,12 @@ export class ProductsService {
     }
     if (dto.isActive !== undefined) {
       data.isActive = dto.isActive;
+    }
+    if (dto.familyId !== undefined) {
+      data.family = dto.familyId ? { connect: { id: dto.familyId } } : { disconnect: true };
+    }
+    if (dto.subFamilyId !== undefined) {
+      data.subFamily = dto.subFamilyId ? { connect: { id: dto.subFamilyId } } : { disconnect: true };
     }
 
     if (Object.keys(data).length === 0) {

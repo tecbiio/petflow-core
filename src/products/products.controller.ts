@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Put } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseIntPipe, Patch, Put, Query } from '@nestjs/common';
 import { Product } from '@prisma/client';
 import type { UpdateProductDto, UpsertProductDto } from './products.dto';
 import { ProductsService } from './products.service';
@@ -8,8 +8,17 @@ export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
   @Get()
-  async list(): Promise<Product[]> {
-    return this.productsService.findAll();
+  async list(
+    @Query('active') active?: string,
+    @Query('familyId') familyId?: string,
+    @Query('subFamilyId') subFamilyId?: string,
+  ): Promise<Product[]> {
+    const filter = {
+      active: active === undefined ? undefined : active === 'true',
+      familyId: familyId ? Number(familyId) : undefined,
+      subFamilyId: subFamilyId ? Number(subFamilyId) : undefined,
+    };
+    return this.productsService.findAll(filter);
   }
 
   @Get(':id')

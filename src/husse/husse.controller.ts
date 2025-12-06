@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Post } from '@nestjs/common';
-import { HusseConfigDto, HusseFetchDto, HusseLoginDto } from './husse.dto';
+import { HusseConfigDto, HusseFetchDto, HusseImportDto, HusseLoginDto } from './husse.dto';
 import { HusseService } from './husse.service';
 
 @Controller('husse')
@@ -32,6 +32,11 @@ export class HusseController {
   async fetch(@Body() dto: HusseFetchDto) {
     const result = await this.husseService.fetchPages(dto);
     return result;
+  }
+
+  @Post('import-products')
+  importProducts(@Body() dto: HusseImportDto) {
+    return this.husseService.importProducts(dto);
   }
 
   @Post('logout')
