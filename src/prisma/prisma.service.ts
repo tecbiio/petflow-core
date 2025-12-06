@@ -1,24 +1,47 @@
-import { INestApplication, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
+import { AsyncLocalStorage } from 'async_hooks';
+
+type TenantContext = {
+  tenantId: number;
+  tenantCode: string;
+  dbUrl: string;
+  userId?: number;
+};
 
 @Injectable()
-export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
-  constructor() {
-    super();
+export class PrismaService implements OnModuleDestroy {
+  private readonly context = new AsyncLocalStorage<TenantContext>();
+  private readonly clients = new Map<string, PrismaClient>();
+
+  runWithTenant<T>(ctx: TenantContext, callback: () => T): T {
+    return this.context.run(ctx, callback);
   }
 
-  async onModuleInit() {
-    await this.$connect();
+  client(): PrismaClient {
+    const ctx = this.context.getStore();
+    if (!ctx?.dbUrl) {
+      throw new Error('Contexte tenant manquant : aucune base tenant sélectionnée');
+    }
+    let client = this.clients.get(ctx.dbUrl);
+    if (!client) {
+      client = new PrismaClient({ datasources: { db: { url: ctx.dbUrl } } });
+      this.clients.set(ctx.dbUrl, client);
+    }
+    return client;
   }
 
-  async enableShutdownHooks(app: INestApplication) {
-    // Prisma 5+ ne typait plus l'événement beforeExit sur $on ; on se branche sur le process Node.
-    process.on('beforeExit', async () => {
-      await app.close();
-    });
+  getCurrentTenant(): TenantContext | undefined {
+    return this.context.getStore();
   }
 
   async onModuleDestroy() {
-    await this.$disconnect();
+    await Promise.all(
+      Array.from(this.clients.values()).map((client) =>
+        client
+          .$disconnect()
+          .catch(() => undefined),
+      ),
+    );
   }
 }

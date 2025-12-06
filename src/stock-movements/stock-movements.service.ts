@@ -9,6 +9,7 @@ export class StockMovementsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async findAll(filter?: { productId?: number; reasons?: StockMovementReason[] }): Promise<StockMovement[]> {
+    const prisma = this.prisma.client();
     const where: Prisma.StockMovementWhereInput = {};
     if (filter?.productId !== undefined) {
       where.productId = filter.productId;
@@ -16,24 +17,27 @@ export class StockMovementsService {
     if (filter?.reasons && filter.reasons.length > 0) {
       where.reason = { in: filter.reasons };
     }
-    return this.prisma.stockMovement.findMany({ where, orderBy: { createdAt: 'desc' } });
+    return prisma.stockMovement.findMany({ where, orderBy: { createdAt: 'desc' } });
   }
 
   async findByProductId(productId: number): Promise<StockMovement[]> {
-    return this.prisma.stockMovement.findMany({
+    const prisma = this.prisma.client();
+    return prisma.stockMovement.findMany({
       where: { productId },
       orderBy: { createdAt: 'desc' },
     });
   }
 
   async findByStockLocationId(stockLocationId: number): Promise<StockMovement[]> {
-    return this.prisma.stockMovement.findMany({
+    const prisma = this.prisma.client();
+    return prisma.stockMovement.findMany({
       where: { stockLocationId },
       orderBy: { createdAt: 'desc' },
     });
   }
 
   async findByDate(date: Date): Promise<StockMovement[]> {
+    const prisma = this.prisma.client();
     const start = new Date(date);
     if (isNaN(start.getTime())) {
       throw new BadRequestException('Invalid date format');
@@ -42,7 +46,7 @@ export class StockMovementsService {
     start.setHours(0, 0, 0, 0);
     end.setHours(23, 59, 59, 999);
 
-    return this.prisma.stockMovement.findMany({
+    return prisma.stockMovement.findMany({
       where: {
         createdAt: {
           gte: start,
@@ -54,19 +58,21 @@ export class StockMovementsService {
   }
 
   async createOne(dto: CreateStockMovementDto): Promise<StockMovement> {
+    const prisma = this.prisma.client();
     const data = this.toCreateInput(dto);
-    return this.prisma.stockMovement.create({ data });
+    return prisma.stockMovement.create({ data });
   }
 
   async createMany(dtos: CreateStockMovementDto[]): Promise<StockMovement[]> {
+    const prisma = this.prisma.client();
     if (!Array.isArray(dtos) || dtos.length === 0) {
       throw new BadRequestException('At least one stock movement is required');
     }
 
     const data = dtos.map((dto) => this.toCreateInput(dto));
 
-    const created = await this.prisma.$transaction(
-      data.map((movement) => this.prisma.stockMovement.create({ data: movement })),
+    const created = await prisma.$transaction(
+      data.map((movement) => prisma.stockMovement.create({ data: movement })),
     );
 
     return created;

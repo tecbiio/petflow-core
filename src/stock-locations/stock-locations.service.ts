@@ -8,11 +8,13 @@ export class StockLocationsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async findAll(): Promise<StockLocation[]> {
-    return this.prisma.stockLocation.findMany({ orderBy: { createdAt: 'desc' } });
+    const prisma = this.prisma.client();
+    return prisma.stockLocation.findMany({ orderBy: { createdAt: 'desc' } });
   }
 
   async findOne(id: number): Promise<StockLocation> {
-    const stockLocation = await this.prisma.stockLocation.findUnique({ where: { id } });
+    const prisma = this.prisma.client();
+    const stockLocation = await prisma.stockLocation.findUnique({ where: { id } });
     if (!stockLocation) {
       throw new NotFoundException(`StockLocation ${id} not found`);
     }
@@ -20,7 +22,8 @@ export class StockLocationsService {
   }
 
   async findDefault(): Promise<StockLocation> {
-    const stockLocation = await this.prisma.stockLocation.findFirst({
+    const prisma = this.prisma.client();
+    const stockLocation = await prisma.stockLocation.findFirst({
       where: { isDefault: true },
       orderBy: { createdAt: 'asc' },
     });
@@ -34,7 +37,8 @@ export class StockLocationsService {
 
   async create(dto: UpsertStockLocationDto): Promise<StockLocation> {
     const data = this.toCreateInput(dto);
-    const created = await this.prisma.stockLocation.create({ data });
+    const prisma = this.prisma.client();
+    const created = await prisma.stockLocation.create({ data });
     if (created.isDefault) {
       await this.unsetDefaultExcept(created.id);
     }
@@ -42,13 +46,14 @@ export class StockLocationsService {
   }
 
   async update(id: number, dto: UpdateStockLocationDto): Promise<StockLocation> {
-    const existing = await this.prisma.stockLocation.findUnique({ where: { id } });
+    const prisma = this.prisma.client();
+    const existing = await prisma.stockLocation.findUnique({ where: { id } });
     if (!existing) {
       throw new NotFoundException(`StockLocation ${id} not found`);
     }
 
     const data = this.toUpdateInput(dto);
-    const updated = await this.prisma.stockLocation.update({ where: { id }, data });
+    const updated = await prisma.stockLocation.update({ where: { id }, data });
     if (updated.isDefault) {
       await this.unsetDefaultExcept(updated.id);
     }
@@ -90,7 +95,8 @@ export class StockLocationsService {
   }
 
   private async unsetDefaultExcept(id: number) {
-    await this.prisma.stockLocation.updateMany({
+    const prisma = this.prisma.client();
+    await prisma.stockLocation.updateMany({
       where: { id: { not: id }, isDefault: true },
       data: { isDefault: false },
     });

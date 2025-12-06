@@ -1,39 +1,57 @@
-import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
-import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
+import { Injectable, Logger, OnModuleInit, UnauthorizedException } from '@nestjs/common';
+import { Tenant, User } from '@prisma/client';
+import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'crypto';
 import type { Response } from 'express';
+import { PrismaService } from '../prisma/prisma.service';
+import { MasterPrismaService } from '../prisma/master-prisma.service';
+
+type UserRole = 'ADMIN' | 'USER';
 
 export type TokenPayload = {
-  sub: string;
+  sub: string; // email
+  userId: number;
+  tenantId: number;
+  tenantCode: string;
+  dbUrl: string;
+  role: UserRole;
   iat: number;
   exp: number;
 };
 
 @Injectable()
-export class AuthService {
+export class AuthService implements OnModuleInit {
   private readonly logger = new Logger(AuthService.name);
-  private readonly username = (process.env.AUTH_USER ?? 'admin').trim();
-  private readonly passwordHash = this.resolvePasswordHash();
   private readonly tokenTtlMs = this.resolveTtl();
   private readonly signingKey = this.resolveSigningKey();
 
-  login(username: string, password: string): { token: string; payload: TokenPayload } {
-    if (!username || !password) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly masterPrisma: MasterPrismaService,
+  ) {}
+
+  async onModuleInit() {
+    await this.bootstrapDefaultUser();
+  }
+
+  async login(email: string, password: string, tenantCode?: string): Promise<{ token: string; payload: TokenPayload }> {
+    if (!email || !password) {
       throw new UnauthorizedException('Identifiants manquants');
     }
 
-    if (!this.passwordHash) {
-      throw new UnauthorizedException('AUTH_PASSWORD (ou AUTH_PASSWORD_HASH) n’est pas configuré côté serveur.');
+    const normalizedEmail = email.trim().toLowerCase();
+    const tenant = await this.resolveTenant(normalizedEmail, tenantCode);
+    const user = await this.masterPrisma.user.findUnique({
+      where: { tenantId_email: { tenantId: tenant.id, email: normalizedEmail } },
+    });
+    if (!user) {
+      throw new UnauthorizedException('Utilisateur introuvable pour ce tenant');
     }
 
-    if (!this.safeEqualStrings(username.trim(), this.username)) {
+    if (!this.verifyPassword(password, user.passwordHash)) {
       throw new UnauthorizedException('Identifiants invalides');
     }
 
-    if (!this.safeEqualBuffers(this.passwordHash, this.hashPassword(password))) {
-      throw new UnauthorizedException('Identifiants invalides');
-    }
-
-    const payload = this.buildPayload();
+    const payload = this.buildPayload(user, tenant);
     const token = this.encodeToken(payload);
     return { token, payload };
   }
@@ -60,12 +78,8 @@ export class AuthService {
       throw new UnauthorizedException('Token invalide');
     }
 
-    if (!payload?.sub || typeof payload.exp !== 'number') {
+    if (!payload?.sub || typeof payload.exp !== 'number' || !payload.tenantId || !payload.userId) {
       throw new UnauthorizedException('Token invalide');
-    }
-
-    if (!this.safeEqualStrings(payload.sub, this.username)) {
-      throw new UnauthorizedException('Utilisateur inconnu');
     }
 
     if (payload.exp * 1000 < Date.now()) {
@@ -95,10 +109,19 @@ export class AuthService {
     });
   }
 
-  private buildPayload(): TokenPayload {
+  private buildPayload(user: User, tenant: Tenant): TokenPayload {
     const iat = Math.floor(Date.now() / 1000);
     const exp = Math.floor((Date.now() + this.tokenTtlMs) / 1000);
-    return { sub: this.username, iat, exp };
+    return {
+      sub: user.email,
+      userId: user.id,
+      tenantId: tenant.id,
+      tenantCode: tenant.code,
+      dbUrl: tenant.databaseUrl,
+      role: (user.role as UserRole) ?? 'USER',
+      iat,
+      exp,
+    };
   }
 
   private encodeToken(payload: TokenPayload): string {
@@ -111,32 +134,10 @@ export class AuthService {
     return createHmac('sha256', this.signingKey).update(payload).digest('base64url');
   }
 
-  private resolvePasswordHash(): Buffer | null {
-    const hashed = process.env.AUTH_PASSWORD_HASH?.trim();
-    if (hashed) {
-      try {
-        return Buffer.from(hashed, 'hex');
-      } catch (err) {
-        this.logger.warn(`AUTH_PASSWORD_HASH invalide (doit être hexadécimal SHA-256) : ${err}`);
-      }
-    }
-
-    const plain = process.env.AUTH_PASSWORD?.trim();
-    if (plain) {
-      return this.hashPassword(plain);
-    }
-
-    this.logger.warn('Aucun mot de passe fourni (AUTH_PASSWORD ou AUTH_PASSWORD_HASH). Les connexions seront refusées.');
-    return null;
-  }
-
   private resolveSigningKey(): Buffer {
     const explicit = process.env.AUTH_TOKEN_SECRET?.trim();
     if (explicit) {
       return Buffer.from(explicit, 'utf-8');
-    }
-    if (this.passwordHash) {
-      return this.passwordHash;
     }
     const random = randomBytes(32);
     this.logger.warn('AUTH_TOKEN_SECRET non défini : clé éphémère générée (les sessions expireront au redémarrage).');
@@ -151,8 +152,20 @@ export class AuthService {
     return parsed;
   }
 
-  private hashPassword(password: string): Buffer {
-    return createHmac('sha256', 'petflow-auth-salt').update(password).digest();
+  private hashPassword(password: string, salt?: Buffer): string {
+    const actualSalt = salt ?? randomBytes(16);
+    const derived = scryptSync(password, actualSalt, 32);
+    return `${actualSalt.toString('hex')}:${derived.toString('hex')}`;
+  }
+
+  private verifyPassword(password: string, stored: string): boolean {
+    const [saltHex, hashHex] = stored.split(':');
+    if (!saltHex || !hashHex) return false;
+    const salt = Buffer.from(saltHex, 'hex');
+    const expected = Buffer.from(hashHex, 'hex');
+    const derived = scryptSync(password, salt, 32);
+    if (derived.length !== expected.length) return false;
+    return timingSafeEqual(derived, expected);
   }
 
   private safeEqualStrings(a: string, b: string): boolean {
@@ -170,5 +183,68 @@ export class AuthService {
 
   private isCookieSecure(): boolean {
     return process.env.AUTH_COOKIE_SECURE === 'true' || process.env.NODE_ENV === 'production';
+  }
+
+  private async resolveTenant(email: string, tenantCode?: string): Promise<Tenant> {
+    if (tenantCode) {
+      const tenant = await this.masterPrisma.tenant.findUnique({
+        where: { code: tenantCode.trim().toLowerCase() },
+      });
+      if (!tenant) {
+        throw new UnauthorizedException('Tenant inconnu');
+      }
+      return tenant;
+    }
+
+    const matches = await this.masterPrisma.user.findMany({ where: { email }, select: { tenant: true } });
+    if (matches.length === 0) {
+      throw new UnauthorizedException('Utilisateur introuvable');
+    }
+    if (matches.length > 1) {
+      throw new UnauthorizedException('Plusieurs tenants pour cet utilisateur : précisez le tenant.');
+    }
+    return matches[0].tenant;
+  }
+
+  private async bootstrapDefaultUser() {
+    const userCount = await this.masterPrisma.user.count();
+    if (userCount > 0) return;
+
+    const email = (process.env.AUTH_BOOTSTRAP_USER ?? process.env.AUTH_USER)?.trim();
+    const password = (process.env.AUTH_BOOTSTRAP_PASSWORD ?? process.env.AUTH_PASSWORD)?.trim();
+    const tenantCode = (process.env.AUTH_BOOTSTRAP_TENANT ?? 'default').trim().toLowerCase();
+    const tenantName = process.env.AUTH_BOOTSTRAP_TENANT_NAME ?? 'Default tenant';
+    const tenantDbUrl = process.env.AUTH_BOOTSTRAP_TENANT_DATABASE_URL ?? process.env.DATABASE_URL;
+    if (!email || !password) {
+      this.logger.warn(
+        'Aucun utilisateur trouvé et aucune variable AUTH_BOOTSTRAP_USER/PASSWORD définie. Créez un compte manuellement.',
+      );
+      return;
+    }
+
+    if (!tenantDbUrl) {
+      this.logger.warn('AUTH_BOOTSTRAP_TENANT_DATABASE_URL manquant : impossible de créer le tenant par défaut.');
+      return;
+    }
+
+    const tenant = await this.masterPrisma.tenant.create({
+      data: {
+        code: tenantCode,
+        name: tenantName,
+        databaseUrl: tenantDbUrl,
+      },
+    });
+
+    const passwordHash = this.hashPassword(password);
+    await this.masterPrisma.user.create({
+      data: {
+        email: email.trim().toLowerCase(),
+        passwordHash,
+        role: 'ADMIN',
+        tenantId: tenant.id,
+      },
+    });
+
+    this.logger.log(`Tenant "${tenantCode}" et utilisateur admin "${email}" créés (bootstrap). Base: ${tenantDbUrl}`);
   }
 }

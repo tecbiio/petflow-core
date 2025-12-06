@@ -12,18 +12,20 @@ model Product {
   name              String
   description       String?
   price             Decimal
-  sku               String    @unique
+  sku               String
   isActive          Boolean   @default(true)
-  axonautProductId  Int?      @unique
+  axonautProductId  Int?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   stockMovements    StockMovement[]
   inventories       Inventory[]
+  @@unique([sku])
+  @@unique([axonautProductId])
 }
 
 model StockLocation {
   id                Int       @id @default(autoincrement())
-  code              String    @unique
+  code              String
   name              String
   isDefault         Boolean   @default(true)
   isActive          Boolean   @default(true)
@@ -31,6 +33,7 @@ model StockLocation {
   updatedAt         DateTime  @updatedAt
   stockMovements    StockMovement[]
   inventories       Inventory[]
+  @@unique([code])
 }
 
 model StockMovement {
@@ -55,4 +58,27 @@ model Inventory {
   quantity          Int
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
+}
+
+model Tenant {
+  id           Int       @id @default(autoincrement())
+  code         String    @unique
+  name         String
+  databaseUrl  String
+  users        User[]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model User {
+  id           Int       @id @default(autoincrement())
+  tenantId     Int
+  tenant       Tenant    @relation(fields: [tenantId], references: [id])
+  email        String
+  passwordHash String
+  role         String    @default("USER")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([tenantId, email])
 }

@@ -84,7 +84,7 @@ async function main() {
   await prisma.stockMovement.deleteMany();
   await prisma.inventory.deleteMany();
 
-  const inventories: Prisma.InventoryCreateManyInput[] = [
+  const inventories: Omit<Prisma.InventoryCreateManyInput, 'tenantId'>[] = [
     {
       productId: productId('FOOD-CHK-10KG'),
       stockLocationId: locationId('MAIN_WAREHOUSE'),
@@ -119,7 +119,7 @@ async function main() {
 
   await prisma.inventory.createMany({ data: inventories });
 
-  const movements: Prisma.StockMovementCreateManyInput[] = [
+  const movements: Omit<Prisma.StockMovementCreateManyInput, 'tenantId'>[] = [
     {
       productId: productId('FOOD-CHK-10KG'),
       stockLocationId: locationId('MAIN_WAREHOUSE'),

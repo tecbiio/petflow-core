@@ -17,12 +17,13 @@ export class StockService {
    * Stock at a given date.
    */
   async getStockAt(productId: number, at: Date): Promise<number> {
+    const prisma = this.prisma.client();
     const target = new Date(at);
     if (isNaN(target.getTime())) {
       throw new BadRequestException('Invalid date format');
     }
 
-    const lastInventory = await this.prisma.inventory.findFirst({
+    const lastInventory = await prisma.inventory.findFirst({
       where: { productId, createdAt: { lte: target } },
       orderBy: { createdAt: 'desc' },
     });
@@ -30,7 +31,7 @@ export class StockService {
     const baseQuantity = lastInventory?.quantity ?? 0;
     const fromDate = lastInventory?.createdAt;
 
-    const movementsSum = await this.prisma.stockMovement.aggregate({
+    const movementsSum = await prisma.stockMovement.aggregate({
       _sum: { quantityDelta: true },
       where: {
         productId,
@@ -52,7 +53,8 @@ export class StockService {
    * Stock variations (raw movements) for a product.
    */
   async getVariations(productId: number): Promise<StockMovement[]> {
-    return this.prisma.stockMovement.findMany({
+    const prisma = this.prisma.client();
+    return prisma.stockMovement.findMany({
       where: { productId },
       orderBy: { createdAt: 'desc' },
     });

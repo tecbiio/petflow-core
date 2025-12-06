@@ -4,8 +4,9 @@ import { Public } from '../common/auth/public.decorator';
 import { AuthService, TokenPayload } from './auth.service';
 
 type LoginDto = {
-  username?: string;
+  email?: string;
   password?: string;
+  tenant?: string;
 };
 
 @Controller('auth')
@@ -14,13 +15,21 @@ export class AuthController {
 
   @Post('login')
   @Public()
-  login(@Body() body: LoginDto, @Res({ passthrough: true }) res: Response) {
-    if (!body?.username || !body?.password) {
-      throw new BadRequestException('username et password sont requis');
+  async login(@Body() body: LoginDto, @Res({ passthrough: true }) res: Response) {
+    if (!body?.email || !body?.password) {
+      throw new BadRequestException('email et password sont requis');
     }
-    const session = this.authService.login(body.username, body.password);
+    const session = await this.authService.login(body.email, body.password, body.tenant);
     this.authService.attachAuthCookie(res, session.token, session.payload.exp * 1000);
-    return { user: { username: session.payload.sub }, expiresAt: session.payload.exp * 1000 };
+    return {
+      user: {
+        email: session.payload.sub,
+        role: session.payload.role,
+        tenant: session.payload.tenantCode,
+        dbUrl: session.payload.dbUrl,
+      },
+      expiresAt: session.payload.exp * 1000,
+    };
   }
 
   @Post('logout')
@@ -35,6 +44,15 @@ export class AuthController {
     if (!req.user) {
       throw new BadRequestException('Aucune session active');
     }
-    return { user: { username: req.user.sub }, expiresAt: req.user.exp * 1000 };
+    return {
+      user: {
+        email: req.user.sub,
+        role: req.user.role,
+        tenant: req.user.tenantCode,
+        userId: req.user.userId,
+        dbUrl: req.user.dbUrl,
+      },
+      expiresAt: req.user.exp * 1000,
+    };
   }
 }

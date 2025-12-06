@@ -8,11 +8,13 @@ export class ProductsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async findAll(): Promise<Product[]> {
-    return this.prisma.product.findMany({ orderBy: { createdAt: 'desc' } });
+    const prisma = this.prisma.client();
+    return prisma.product.findMany({ orderBy: { createdAt: 'desc' } });
   }
 
   async findOne(id: number): Promise<Product> {
-    const product = await this.prisma.product.findUnique({ where: { id } });
+    const prisma = this.prisma.client();
+    const product = await prisma.product.findUnique({ where: { id } });
 
     if (!product) {
       throw new NotFoundException(`Product ${id} not found`);
@@ -23,16 +25,18 @@ export class ProductsService {
 
   async create(dto: UpsertProductDto): Promise<Product> {
     const data = this.toCreateInput(dto);
-    return this.prisma.product.create({ data });
+    const prisma = this.prisma.client();
+    return prisma.product.create({ data });
   }
 
   async update(id: number, dto: UpdateProductDto): Promise<Product> {
-    const existing = await this.prisma.product.findUnique({ where: { id } });
+    const prisma = this.prisma.client();
+    const existing = await prisma.product.findUnique({ where: { id } });
     if (!existing) {
       throw new NotFoundException(`Product ${id} not found`);
     }
     const data = this.toUpdateInput(dto);
-    return this.prisma.product.update({ where: { id }, data });
+    return prisma.product.update({ where: { id }, data });
   }
 
   private toCreateInput(dto: UpsertProductDto): Prisma.ProductCreateInput {
@@ -86,4 +90,5 @@ export class ProductsService {
       throw new BadRequestException('sku is required');
     }
   }
+
 }

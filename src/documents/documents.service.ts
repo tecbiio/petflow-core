@@ -39,6 +39,7 @@ export class DocumentsService {
   }
 
   async ingest(dto: IngestDocumentDto) {
+    const prisma = this.prisma.client();
     const locationId = dto.stockLocationId ?? (await this.getDefaultLocationId());
     if (!locationId) {
       throw new Error('Aucun emplacement de stock par défaut trouvé.');
@@ -77,7 +78,7 @@ export class DocumentsService {
     }
 
     if (createdMovements.length > 0) {
-      await this.prisma.stockMovement.createMany({ data: createdMovements });
+      await prisma.stockMovement.createMany({ data: createdMovements });
     }
 
     return { created: createdMovements.length, skipped, productsCreated, productsLinked };
@@ -152,11 +153,13 @@ export class DocumentsService {
 
   private async findExistingProduct(reference?: string, axonautId?: number): Promise<Product | null> {
     if (axonautId) {
-      const byAxonaut = await this.prisma.product.findUnique({ where: { axonautProductId: axonautId } });
+      const prisma = this.prisma.client();
+      const byAxonaut = await prisma.product.findFirst({ where: { axonautProductId: axonautId } });
       if (byAxonaut) return byAxonaut;
     }
     if (!reference) return null;
-    return this.prisma.product.findFirst({
+    const prisma = this.prisma.client();
+    return prisma.product.findFirst({
       where: { OR: [{ sku: reference }, { name: reference }] },
     });
   }
@@ -170,7 +173,8 @@ export class DocumentsService {
     }
     const price = this.pickPrice(line);
     try {
-      return await this.prisma.product.create({
+      const prisma = this.prisma.client();
+      return await prisma.product.create({
         data: {
           name,
           sku,
@@ -190,14 +194,15 @@ export class DocumentsService {
     if (!axonautId || product.axonautProductId) {
       return { product, linked: false };
     }
-    const conflict = await this.prisma.product.findFirst({
+    const prisma = this.prisma.client();
+    const conflict = await prisma.product.findFirst({
       where: { axonautProductId: axonautId, NOT: { id: product.id } },
     });
     if (conflict) {
       this.logger.warn(`Axonaut ID ${axonautId} déjà utilisé par le produit #${conflict.id}, liaison ignorée pour #${product.id}.`);
       return { product, linked: false };
     }
-    const updated = await this.prisma.product.update({
+    const updated = await prisma.product.update({
       where: { id: product.id },
       data: { axonautProductId: axonautId },
     });
@@ -225,6 +230,14 @@ export class DocumentsService {
     if (ref === undefined || ref === null) return null;
     const str = String(ref).trim().toLowerCase();
     return str || null;
+  }
+
+  private getTenantId(): number {
+    const ctx = this.prisma.getCurrentTenant();
+    if (!ctx?.tenantId) {
+      throw new Error('Tenant introuvable pour cette requête');
+    }
+    return ctx.tenantId;
   }
 
   private toInt(value: unknown): number | undefined {
@@ -261,7 +274,8 @@ export class DocumentsService {
   }
 
   private async getDefaultLocationId(): Promise<number | null> {
-    const location = await this.prisma.stockLocation.findFirst({
+    const prisma = this.prisma.client();
+    const location = await prisma.stockLocation.findFirst({
       where: { isDefault: true },
       orderBy: { createdAt: 'asc' },
     });
