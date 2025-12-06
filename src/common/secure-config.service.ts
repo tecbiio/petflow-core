@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
 
@@ -6,6 +6,7 @@ type EncryptedPayload = { iv: string; ciphertext: string };
 
 @Injectable()
 export class SecureConfigService {
+  private readonly logger = new Logger(SecureConfigService.name);
   private readonly key: Buffer;
 
   constructor(private readonly prisma: PrismaService) {
@@ -24,10 +25,11 @@ export class SecureConfigService {
   async load<T = unknown>(key: string): Promise<T | null> {
     const record = await this.prisma.client().secureConfig.findUnique({ where: { key } });
     if (!record) return null;
-    const json = this.decrypt({ iv: record.iv, ciphertext: record.ciphertext });
     try {
+      const json = this.decrypt({ iv: record.iv, ciphertext: record.ciphertext });
       return JSON.parse(json) as T;
-    } catch {
+    } catch (err) {
+      this.logger.warn(`Échec de déchiffrement de ${key}: ${err}`);
       return null;
     }
   }
