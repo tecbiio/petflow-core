@@ -14,7 +14,7 @@ export class AxonautController {
 
   @Get('config')
   async getConfig() {
-    return this.axonautService.getConfig();
+    return this.axonautService.getPublicConfig();
   }
 
   @Post('update-stock')

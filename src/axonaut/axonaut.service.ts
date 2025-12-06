@@ -46,6 +46,20 @@ export class AxonautService {
     return this.config;
   }
 
+  async getPublicConfig() {
+    if (!this.config) {
+      await this.loadFromDisk();
+    }
+    if (!this.config) return null;
+    const { baseUrl, updateStockUrlTemplate, lookupProductsUrlTemplate } = this.config;
+    return {
+      hasApiKey: true,
+      baseUrl,
+      updateStockUrlTemplate,
+      lookupProductsUrlTemplate,
+    };
+  }
+
   async updateStock(dto: AxonautUpdateStockDto) {
     const config = await this.ensureConfig();
     const { baseUrl, apiKey, updateStockUrlTemplate } = config;
@@ -151,6 +165,11 @@ export class AxonautService {
     const target = (dto.url ?? dto.path ?? '').trim();
     if (!target) throw new Error('url ou path requis');
     const url = target.startsWith('http') ? target : this.normalize(config.baseUrl, target);
+    this.assertSameHost(url, config.baseUrl);
+    const parsedUrl = new URL(url);
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+      throw new Error('Seules les requêtes http(s) sont autorisées');
+    }
     const headers: Record<string, string> = { userApiKey: config.apiKey };
     const options: RequestInit = { method, headers };
     if (dto.body && method !== 'GET') {
@@ -322,7 +341,7 @@ export class AxonautService {
   private async saveToDisk(apiKey: string) {
     try {
       await fs.promises.mkdir(path.dirname(this.configPath), { recursive: true });
-      await fs.promises.writeFile(this.configPath, JSON.stringify({ apiKey }, null, 2), 'utf-8');
+      await fs.promises.writeFile(this.configPath, JSON.stringify({ apiKey }, null, 2), { encoding: 'utf-8', mode: 0o600 });
     } catch (err) {
       this.logger.warn(`Échec d'écriture de la config Axonaut: ${err}`);
     }
@@ -339,15 +358,52 @@ export class AxonautService {
   }
 
   private withDefaults(dto: AxonautConfigDto): ResolvedConfig {
-    const baseUrl = dto.baseUrl ?? 'https://axonaut.com';
-    const updateStockUrlTemplate = dto.updateStockUrlTemplate ?? '/api/v2/products/{product_id}/stock';
-    const lookupProductsUrlTemplate = dto.lookupProductsUrlTemplate ?? '/api/v2/products?reference={reference}';
+    const baseUrl = this.sanitizeBaseUrl(dto.baseUrl ?? 'https://axonaut.com');
+    const updateStockUrlTemplate = this.sanitizeTemplate(
+      dto.updateStockUrlTemplate ?? '/api/v2/products/{product_id}/stock',
+      baseUrl,
+    );
+    const lookupProductsUrlTemplate = this.sanitizeTemplate(
+      dto.lookupProductsUrlTemplate ?? '/api/v2/products?reference={reference}',
+      baseUrl,
+    );
     return {
       apiKey: dto.apiKey,
       baseUrl,
       updateStockUrlTemplate,
       lookupProductsUrlTemplate,
     };
+  }
+
+  private sanitizeBaseUrl(input: string): string {
+    const trimmed = input.trim();
+    try {
+      const parsed = new URL(trimmed);
+      if (!['http:', 'https:'].includes(parsed.protocol)) {
+        throw new Error('baseUrl doit être http(s)');
+      }
+      return parsed.origin;
+    } catch (err) {
+      throw new Error(`baseUrl invalide: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  private sanitizeTemplate(template: string, baseUrl: string) {
+    const trimmed = template.trim();
+    if (trimmed.startsWith('http')) {
+      const parsed = new URL(trimmed);
+      this.assertSameHost(parsed.toString(), baseUrl);
+      return `${parsed.pathname}${parsed.search}`;
+    }
+    return trimmed;
+  }
+
+  private assertSameHost(target: string, baseUrl: string) {
+    const targetUrl = new URL(target);
+    const base = new URL(baseUrl);
+    if (targetUrl.hostname !== base.hostname) {
+      throw new Error(`URL ${targetUrl.hostname} non autorisée (domaine Axonaut attendu: ${base.hostname})`);
+    }
   }
 
   private normalize(base: string, path: string) {

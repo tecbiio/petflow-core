@@ -10,9 +10,11 @@ import { StockModule } from './stock/stock.module';
 import { HusseModule } from './husse/husse.module';
 import { AxonautModule } from './axonaut/axonaut.module';
 import { DocumentsModule } from './documents/documents.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
+    AuthModule,
     PrismaModule,
     ProductsModule,
     StockLocationsModule,

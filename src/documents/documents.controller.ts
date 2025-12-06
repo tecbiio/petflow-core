@@ -10,7 +10,18 @@ export class DocumentsController {
   constructor(private readonly documentsService: DocumentsService) {}
 
   @Post('parse')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 5 * 1024 * 1024 },
+      fileFilter: (req, file, cb) => {
+        if (!file.mimetype?.includes('pdf')) {
+          cb(new BadRequestException('Seuls les PDF sont acceptés'), false);
+          return;
+        }
+        cb(null, true);
+      },
+    }),
+  )
   async parse(@UploadedFile() file: Express.Multer.File, @Body() body: ParseDocumentDto) {
     if (!file) {
       throw new BadRequestException('Aucun fichier PDF reçu (clé "file").');

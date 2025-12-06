@@ -14,14 +14,26 @@ export class HusseService {
   private readonly configPath = process.env.HUSSE_CONFIG_PATH || path.resolve(process.cwd(), 'tmp', 'husse-config.json');
   private cookieHeader: string | null = null;
   private config: { username: string; password: string } | null = null;
+  private allowedOrigin: string | null = null;
 
   constructor() {
     void this.loadFromDisk();
   }
 
   async login(payload: HusseLoginDto): Promise<void> {
-    const { baseUrl, username, password } = payload;
-    const response = await fetch(baseUrl, {
+    const { username, password } = payload;
+
+    let parsed: URL;
+    try {
+      parsed = new URL(payload.baseUrl);
+    } catch {
+      throw new Error('baseUrl invalide');
+    }
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      throw new Error('baseUrl doit être http(s)');
+    }
+
+    const response = await fetch(parsed.toString(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
@@ -48,6 +60,7 @@ export class HusseService {
     }
 
     this.cookieHeader = this.buildCookieHeader(setCookie);
+    this.allowedOrigin = parsed.origin;
     this.logger.log('Cookie Husse mis à jour');
   }
 
@@ -55,11 +68,22 @@ export class HusseService {
     if (!this.cookieHeader) {
       throw new Error('Session Husse manquante : appelez /husse/login avant /husse/fetch');
     }
+    if (!this.allowedOrigin) {
+      throw new Error('Origine Husse inconnue : reconnectez-vous pour rafraîchir le cookie.');
+    }
 
     const pages: { url: string; html: string }[] = [];
     let encounteredLoginPage = false;
 
     for (const url of dto.urls) {
+      const parsed = new URL(url);
+      if (!['http:', 'https:'].includes(parsed.protocol)) {
+        throw new Error('Seules les URLs http(s) sont autorisées');
+      }
+      if (parsed.origin !== this.allowedOrigin) {
+        throw new Error(`URL non autorisée : ${parsed.origin} (attendu ${this.allowedOrigin})`);
+      }
+
       const response = await fetch(url, {
         headers: {
           Cookie: this.cookieHeader,
@@ -87,6 +111,7 @@ export class HusseService {
 
   clearCookie() {
     this.cookieHeader = null;
+    this.allowedOrigin = null;
   }
 
   setConfig(dto: HusseConfigDto) {
@@ -102,7 +127,7 @@ export class HusseService {
     if (!this.config) {
       await this.loadFromDisk();
     }
-    return this.config;
+    return { hasCredentials: !!this.config };
   }
 
   private buildCookieHeader(cookies: string[]): string {
@@ -133,7 +158,7 @@ export class HusseService {
   private async saveToDisk(dto: HusseConfigDto) {
     try {
       await fs.promises.mkdir(path.dirname(this.configPath), { recursive: true });
-      await fs.promises.writeFile(this.configPath, JSON.stringify(dto, null, 2), 'utf-8');
+      await fs.promises.writeFile(this.configPath, JSON.stringify(dto, null, 2), { encoding: 'utf-8', mode: 0o600 });
     } catch (err) {
       this.logger.warn(`Échec d'écriture de la config Husse: ${err}`);
     }
