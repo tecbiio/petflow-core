@@ -3,8 +3,7 @@ import { HusseConfigDto, HusseFetchDto, HusseImportDto, HusseLoginDto } from './
 import { HUSSE_BASE_URL, HUSSE_LOGIN_URL, HUSSE_PRODUCT_URLS } from './husse.constants';
 import { parseProductsFromPages, ScrapedProduct } from './husse.parser';
 import { PrismaService } from '../prisma/prisma.service';
-import * as fs from 'fs';
-import * as path from 'path';
+import { SecureConfigService } from '../common/secure-config.service';
 
 /**
  * Service minimaliste pour interagir avec l'extranet Husse en gardant un cookie de session en mémoire.
@@ -14,16 +13,13 @@ import * as path from 'path';
 @Injectable()
 export class HusseService {
   private readonly logger = new Logger(HusseService.name);
-  private readonly configPath = process.env.HUSSE_CONFIG_PATH || path.resolve(process.cwd(), 'tmp', 'husse-config.json');
   private readonly allowedBaseOrigin = new URL(HUSSE_BASE_URL).origin;
   private readonly loginUrl = HUSSE_LOGIN_URL;
   private cookieHeader: string | null = null;
   private config: { username: string; password: string } | null = null;
   private allowedOrigin: string | null = null;
 
-  constructor(private readonly prisma: PrismaService) {
-    void this.loadFromDisk();
-  }
+  constructor(private readonly prisma: PrismaService, private readonly secureConfig: SecureConfigService) {}
 
   async login(payload: HusseLoginDto): Promise<void> {
     await this.performLogin(payload.username, payload.password, payload.baseUrl);
@@ -102,13 +98,13 @@ export class HusseService {
       throw new Error('username et password sont requis');
     }
     this.config = { username: dto.username, password: dto.password };
-    this.saveToDisk(dto).catch((err) => this.logger.warn(`Impossible de persister la config Husse: ${err}`));
+    this.secureConfig.save('husse', dto).catch((err) => this.logger.warn(`Impossible de persister la config Husse: ${err}`));
     this.logger.log('Configuration Husse sauvegardée');
   }
 
   async getConfig() {
     if (!this.config) {
-      await this.loadFromDisk();
+      await this.loadFromSecureStore();
     }
     return { hasCredentials: !!this.config };
   }
@@ -118,7 +114,7 @@ export class HusseService {
       return { username: dto.username, password: dto.password };
     }
     if (!this.config) {
-      await this.loadFromDisk();
+      await this.loadFromSecureStore();
     }
     if (!this.config) {
       throw new Error('Identifiants Husse manquants. Renseignez-les dans les réglages.');
@@ -260,6 +256,16 @@ export class HusseService {
     return created.id;
   }
 
+  private async loadFromSecureStore() {
+    const stored = await this.secureConfig.load<{ username?: string; password?: string }>('husse');
+    if (stored?.username && stored?.password) {
+      this.config = { username: stored.username, password: stored.password };
+      this.logger.log('Configuration Husse chargée depuis le coffre sécurisé.');
+    } else {
+      this.config = null;
+    }
+  }
+
   private looksLikeLogin(body: string): boolean {
     const lower = body.toLowerCase();
     return lower.includes('co_email') || lower.includes('co_pass') || lower.includes('connexion') || lower.includes('login');
@@ -280,27 +286,5 @@ export class HusseService {
       throw new Error(`URL Husse non autorisée (${parsed.origin}). Domaine attendu : ${this.allowedBaseOrigin}`);
     }
     return parsed.toString();
-  }
-
-  private async loadFromDisk() {
-    try {
-      const data = await fs.promises.readFile(this.configPath, 'utf-8');
-      const parsed = JSON.parse(data) as { username?: string; password?: string };
-      if (parsed.username && parsed.password) {
-        this.config = { username: parsed.username, password: parsed.password };
-        this.logger.log(`Configuration Husse chargée depuis ${this.configPath}`);
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  private async saveToDisk(dto: HusseConfigDto) {
-    try {
-      await fs.promises.mkdir(path.dirname(this.configPath), { recursive: true });
-      await fs.promises.writeFile(this.configPath, JSON.stringify(dto, null, 2), { encoding: 'utf-8', mode: 0o600 });
-    } catch (err) {
-      this.logger.warn(`Échec d'écriture de la config Husse: ${err}`);
-    }
   }
 }

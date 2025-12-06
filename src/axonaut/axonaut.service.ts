@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AxonautConfigDto, AxonautLookupDto, AxonautTestRequestDto, AxonautUpdateStockDto } from './axonaut.dto';
-import * as fs from 'fs';
-import * as path from 'path';
+import { SecureConfigService } from '../common/secure-config.service';
 
 type AxonautConfig = AxonautConfigDto;
 type ResolvedConfig = {
@@ -21,34 +20,31 @@ export type AxonautProduct = {
 @Injectable()
 export class AxonautService {
   private readonly logger = new Logger(AxonautService.name);
-  private readonly configPath = process.env.AXONAUT_CONFIG_PATH || path.resolve(process.cwd(), 'tmp', 'axonaut-config.json');
   private config: ResolvedConfig | null = null;
 
-  constructor() {
-    void this.loadFromDisk();
-  }
+  constructor(private readonly secureConfig: SecureConfigService) {}
 
   setConfig(dto: AxonautConfigDto) {
     if (!dto.apiKey || !dto.apiKey.trim()) {
       throw new Error('apiKey est requise');
     }
     this.config = this.withDefaults(dto);
-    this.saveToDisk(dto.apiKey).catch((err) =>
-      this.logger.warn(`Impossible de persister la config Axonaut: ${err}`),
-    );
+    this.secureConfig.save('axonaut', { apiKey: dto.apiKey }).catch((err) => {
+      this.logger.warn(`Impossible de persister la config Axonaut: ${err}`);
+    });
     this.logger.log('Configuration Axonaut mise à jour en mémoire.');
   }
 
   async getConfig() {
     if (!this.config) {
-      await this.loadFromDisk();
+      await this.loadFromSecureStore();
     }
     return this.config;
   }
 
   async getPublicConfig() {
     if (!this.config) {
-      await this.loadFromDisk();
+      await this.loadFromSecureStore();
     }
     if (!this.config) return null;
     const { baseUrl, updateStockUrlTemplate, lookupProductsUrlTemplate } = this.config;
@@ -318,38 +314,9 @@ export class AxonautService {
     return template.replace('{product_id}', encodeURIComponent(reference)).replace('{reference}', encodeURIComponent(reference));
   }
 
-  private async loadFromDisk() {
-    try {
-      const data = await fs.promises.readFile(this.configPath, 'utf-8');
-      const parsed = JSON.parse(data) as Record<string, unknown>;
-      const apiKey = typeof parsed.apiKey === 'string' ? parsed.apiKey.trim() : undefined;
-      if (apiKey) {
-        this.config = this.withDefaults({ apiKey });
-        const hasExtraKeys = Object.keys(parsed).some((k) => k !== 'apiKey');
-        if (hasExtraKeys) {
-          await this.saveToDisk(apiKey);
-          this.logger.log(`Configuration Axonaut migrée et nettoyée dans ${this.configPath}`);
-        } else {
-          this.logger.log(`Configuration Axonaut chargée depuis ${this.configPath}`);
-        }
-      }
-    } catch {
-      // ignore missing or unreadable file
-    }
-  }
-
-  private async saveToDisk(apiKey: string) {
-    try {
-      await fs.promises.mkdir(path.dirname(this.configPath), { recursive: true });
-      await fs.promises.writeFile(this.configPath, JSON.stringify({ apiKey }, null, 2), { encoding: 'utf-8', mode: 0o600 });
-    } catch (err) {
-      this.logger.warn(`Échec d'écriture de la config Axonaut: ${err}`);
-    }
-  }
-
   private async ensureConfig(): Promise<ResolvedConfig> {
     if (!this.config) {
-      await this.loadFromDisk();
+      await this.loadFromSecureStore();
     }
     if (!this.config) {
       throw new Error('Config Axonaut manquante. Appelez /axonaut/config avant d\'utiliser Axonaut.');
@@ -409,6 +376,16 @@ export class AxonautService {
   private normalize(base: string, path: string) {
     if (path.startsWith('http')) return path;
     return `${base.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`;
+  }
+
+  private async loadFromSecureStore() {
+    const stored = await this.secureConfig.load<{ apiKey?: string }>('axonaut');
+    if (stored?.apiKey?.trim()) {
+      this.config = this.withDefaults({ apiKey: stored.apiKey });
+      this.logger.log('Configuration Axonaut chargée depuis le coffre sécurisé.');
+    } else {
+      this.config = null;
+    }
   }
 
   private extractId(payload: any): string | number | undefined {
