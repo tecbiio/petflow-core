@@ -18,5 +18,6 @@ export class IngestDocumentDto {
   docType: DocumentType;
   stockLocationId?: number;
   sourceDocumentId?: string;
+  movementSign?: 'IN' | 'OUT';
   lines: ParsedLine[];
 }

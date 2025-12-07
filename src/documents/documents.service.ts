@@ -65,7 +65,7 @@ export class DocumentsService {
       if (resolution.created) productsCreated += 1;
       if (resolution.linkedAxonaut) productsLinked += 1;
 
-      const delta = this.deltaFromDocType(dto.docType, line.quantity);
+      const delta = this.deltaFromDocType(dto.docType, line.quantity, dto.movementSign);
       const movementReason = this.reasonFromDocType(dto.docType);
       createdMovements.push({
         productId: resolution.product.id,
@@ -249,8 +249,10 @@ export class DocumentsService {
     return undefined;
   }
 
-  private deltaFromDocType(docType: DocumentType, quantity: number) {
+  private deltaFromDocType(docType: DocumentType, quantity: number, movementSign?: 'IN' | 'OUT') {
     const abs = Math.abs(quantity);
+    if (movementSign === 'IN') return abs;
+    if (movementSign === 'OUT') return -abs;
     switch (docType) {
       case DocumentType.FACTURE:
         return -abs;

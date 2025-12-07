@@ -12,6 +12,13 @@ model Product {
   name              String
   description       String?
   price             Decimal
+  priceVdiHt        Decimal   @default(0)
+  priceDistributorHt Decimal   @default(0)
+  priceSaleHt       Decimal   @default(0)
+  purchasePrice     Decimal   @default(0)
+  tvaRate           Decimal   @default(0)
+  packagingId       Int?
+  packaging         Packaging? @relation(fields: [packagingId], references: [id])
   sku               String
   isActive          Boolean   @default(true)
   axonautProductId  Int?
@@ -25,6 +32,14 @@ model Product {
   inventories       Inventory[]
   @@unique([sku])
   @@unique([axonautProductId])
+}
+
+model Packaging {
+  id        Int       @id @default(autoincrement())
+  name      String    @unique
+  products  Product[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 }
 
 model Family {
@@ -56,7 +71,6 @@ model SecureConfig {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 }
-
 model StockLocation {
   id                Int       @id @default(autoincrement())
   code              String
@@ -92,27 +106,4 @@ model Inventory {
   quantity          Int
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
-}
-
-model Tenant {
-  id           Int       @id @default(autoincrement())
-  code         String    @unique
-  name         String
-  databaseUrl  String
-  users        User[]
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-}
-
-model User {
-  id           Int       @id @default(autoincrement())
-  tenantId     Int
-  tenant       Tenant    @relation(fields: [tenantId], references: [id])
-  email        String
-  passwordHash String
-  role         String    @default("USER")
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-
-  @@unique([tenantId, email])
 }

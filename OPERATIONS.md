@@ -1,42 +1,56 @@
-## Commandes d’administration (multi-base)
+# Opérations (bases, migrations, comptes)
 
-> Hypothèses : `DATABASE_URL` pointe vers la base master (fichier `prisma/master.db` en absolu), et le dossier `prisma/` est présent. Tous les chemins de DB sont en `file:/chemin/absolu/...` pour éviter les surprises de répertoires courants.
+## Variables et chemins (SQLite)
+- `MASTER_DATABASE_URL` : base master (Tenant, User, SecureConfig) – ex. `file:/abs/path/petflow-core/prisma/master.db`
+- `DATABASE_URL` : base applicative d’un tenant – ex. `file:/abs/path/petflow-core/prisma/acme.db`
+- Utilise des chemins absolus (`file:/abs/path/...`) pour éviter les surprises selon le répertoire courant.
 
-### 1) Créer/mettre à jour un utilisateur sur un tenant existant (base déjà créée)
+## Générer les clients Prisma
 ```bash
 cd petflow-core
-DATABASE_URL="file:/Users/antonylorenzelli/Desktop/Programmation/petflow/petflow-core/prisma/master.db" \
-npm run tenants:bootstrap -- \
-  --code='husse' \
-  --name='HUSSE' \
-  --dbUrl='file:/Users/antonylorenzelli/Desktop/Programmation/petflow/petflow-core/prisma/husse.db' \
-  --email='nouvel.utilisateur@husse.com' \
-  --password='MotDePasseSolide!' \
-  --locationCode='MAIN' \
-  --locationName='Emplacement principal'
+npx prisma generate                               # client app
+npx prisma generate --schema=prisma/master.prisma # client master
 ```
-- Effets : si le tenant `husse` existe déjà dans la master, l’utilisateur est upsert (créé ou mis à jour) sur ce tenant dans la master. Aucune donnée métier n’est modifiée côté base tenant (migrations passent mais sont déjà appliquées). L’emplacement `MAIN` est upsert dans la base tenant.
 
-### 2) Créer un utilisateur sur une base **nouvelle** (tenant + base non existants)
+## Appliquer les schémas
+- Master (pas de migrations versionnées) :
+  ```bash
+  MASTER_DATABASE_URL=... npx prisma db push --schema=prisma/master.prisma
+  ```
+- Base applicative (migrations versionnées) :
+  ```bash
+  DATABASE_URL=... npx prisma migrate deploy --schema=prisma/schema.prisma
+  # ou pour init rapide : npx prisma db push --schema=prisma/schema.prisma
+  ```
+
+## Bootstrap d’un tenant / admin
+Crée ou met à jour le tenant dans la master, applique les migrations sur la base applicative et upsert un admin + un emplacement par défaut.
 ```bash
 cd petflow-core
-DATABASE_URL="file:/Users/antonylorenzelli/Desktop/Programmation/petflow/petflow-core/prisma/master.db" \
+MASTER_DATABASE_URL=file:/abs/path/petflow-core/prisma/master.db \
+DATABASE_URL=file:/abs/path/petflow-core/prisma/acme.db \
 npm run tenants:bootstrap -- \
-  --code='acme' \
-  --name='ACME' \
-  --dbUrl='file:/Users/antonylorenzelli/Desktop/Programmation/petflow/petflow-core/prisma/acme.db' \
-  --email='admin@acme.com' \
-  --password='MotDePasseSolide!' \
-  --locationCode='MAIN' \
-  --locationName='Entrepôt principal'
+  --code=acme --name="ACME" \
+  --dbUrl=file:/abs/path/petflow-core/prisma/acme.db \
+  --email=admin@acme.com --password=Mot2Passe! \
+  --locationCode=MAIN --locationName="Entrepôt principal"
 ```
-- Effets : crée le tenant dans la master, applique les migrations sur la nouvelle base `acme.db`, crée l’utilisateur admin dans la master et un emplacement `MAIN` dans la base tenant.
+- Relancer la même commande mettra simplement à jour le tenant et l’utilisateur (upsert).
+- Utilise `--dbUrl` pour cibler une autre base si plusieurs tenants coexistent.
 
-### Vérifications rapides
+## Seed ou données de test
 ```bash
-# Utilisateurs en base master
-sqlite3 prisma/master.db "select id,email,role,tenantId from User;"
-
-# Tenants en base master
-sqlite3 prisma/master.db "select id,code,databaseUrl from Tenant;"
+cd petflow-core
+DATABASE_URL=... npx ts-node prisma/seed.ts
 ```
+
+## Vérifications rapides SQLite
+```bash
+sqlite3 prisma/master.db "select id, code, databaseUrl from Tenant;"
+sqlite3 prisma/master.db "select id, email, role, tenantId from User;"
+sqlite3 prisma/acme.db "select id, name, sku from Product limit 5;"
+```
+
+## Réinitialiser les données locales
+- Arrêter les services, supprimer les fichiers `.db` concernés dans `petflow-core/prisma`, puis ré-exécuter les étapes “Appliquer les schémas” et “Bootstrap”.
+- Si le client Prisma master est corrompu, supprime `petflow-core/node_modules/@prisma/master-client` puis régénère (`npx prisma generate --schema=prisma/master.prisma`).

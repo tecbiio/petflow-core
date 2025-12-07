@@ -11,6 +11,8 @@ import { HusseModule } from './husse/husse.module';
 import { AxonautModule } from './axonaut/axonaut.module';
 import { DocumentsModule } from './documents/documents.module';
 import { AuthModule } from './auth/auth.module';
+import { PackagingsModule } from './packagings/packagings.module';
+import { FamiliesModule } from './families/families.module';
 
 @Module({
   imports: [
@@ -24,6 +26,8 @@ import { AuthModule } from './auth/auth.module';
     HusseModule,
     AxonautModule,
     DocumentsModule,
+    PackagingsModule,
+    FamiliesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

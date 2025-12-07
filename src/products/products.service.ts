@@ -1,7 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { UpsertProductDto, UpdateProductDto } from './products.dto';
+import { normalizeProductPayload } from './products.constraints';
 
 const productInclude = {
   family: true,
@@ -10,6 +11,7 @@ const productInclude = {
       family: true,
     },
   },
+  packaging: true,
 } satisfies Prisma.ProductInclude;
 
 @Injectable()
@@ -44,7 +46,8 @@ export class ProductsService {
   }
 
   async create(dto: UpsertProductDto) {
-    const data = this.toCreateInput(dto);
+    const cleaned = normalizeProductPayload(dto, { partial: false });
+    const data = this.toCreateInput(cleaned);
     const prisma = this.prisma.client();
     return prisma.product.create({ data, include: productInclude });
   }
@@ -55,20 +58,24 @@ export class ProductsService {
     if (!existing) {
       throw new NotFoundException(`Product ${id} not found`);
     }
-    const data = this.toUpdateInput(dto);
+    const cleaned = normalizeProductPayload(dto, { partial: true });
+    const data = this.toUpdateInput(cleaned);
     return prisma.product.update({ where: { id }, data, include: productInclude });
   }
 
   private toCreateInput(dto: UpsertProductDto): Prisma.ProductCreateInput {
-    this.assertNameAndSku(dto.name, dto.sku);
-    if (!Number.isFinite(dto.price)) {
-      throw new BadRequestException('price must be a number');
-    }
+    const salePrice = dto.priceSaleHt ?? dto.price;
     return {
       name: dto.name.trim(),
       sku: dto.sku.trim(),
       description: dto.description ?? null,
-      price: dto.price,
+      price: salePrice,
+      priceSaleHt: salePrice,
+      priceVdiHt: dto.priceVdiHt,
+      priceDistributorHt: dto.priceDistributorHt,
+      purchasePrice: dto.purchasePrice,
+      tvaRate: dto.tvaRate,
+      packaging: dto.packagingId ? { connect: { id: dto.packagingId } } : undefined,
       isActive: dto.isActive ?? true,
       family: dto.familyId ? { connect: { id: dto.familyId } } : undefined,
       subFamily: dto.subFamilyId ? { connect: { id: dto.subFamilyId } } : undefined,
@@ -78,20 +85,25 @@ export class ProductsService {
   private toUpdateInput(dto: UpdateProductDto): Prisma.ProductUpdateInput {
     const data: Prisma.ProductUpdateInput = {};
 
-    if (dto.name !== undefined) {
-      if (!dto.name.trim()) throw new BadRequestException('name cannot be empty');
-      data.name = dto.name.trim();
+    if (dto.name !== undefined) data.name = dto.name.trim();
+    if (dto.sku !== undefined) data.sku = dto.sku.trim();
+    if (dto.priceSaleHt !== undefined) {
+      data.priceSaleHt = dto.priceSaleHt;
+      data.price = dto.priceSaleHt;
     }
-    if (dto.sku !== undefined) {
-      if (!dto.sku.trim()) throw new BadRequestException('sku cannot be empty');
-      data.sku = dto.sku.trim();
-    }
-    if (dto.price !== undefined) {
-      if (!Number.isFinite(dto.price)) throw new BadRequestException('price must be a number');
+    if (dto.price !== undefined && dto.priceSaleHt === undefined) {
       data.price = dto.price;
+      data.priceSaleHt = dto.price;
     }
+    if (dto.priceVdiHt !== undefined) data.priceVdiHt = dto.priceVdiHt;
+    if (dto.priceDistributorHt !== undefined) data.priceDistributorHt = dto.priceDistributorHt;
+    if (dto.purchasePrice !== undefined) data.purchasePrice = dto.purchasePrice;
+    if (dto.tvaRate !== undefined) data.tvaRate = dto.tvaRate;
     if (dto.description !== undefined) {
       data.description = dto.description ?? null;
+    }
+    if (dto.packagingId !== undefined) {
+      data.packaging = dto.packagingId ? { connect: { id: dto.packagingId } } : { disconnect: true };
     }
     if (dto.isActive !== undefined) {
       data.isActive = dto.isActive;
@@ -103,20 +115,7 @@ export class ProductsService {
       data.subFamily = dto.subFamilyId ? { connect: { id: dto.subFamilyId } } : { disconnect: true };
     }
 
-    if (Object.keys(data).length === 0) {
-      throw new BadRequestException('No fields provided for update');
-    }
-
     return data;
-  }
-
-  private assertNameAndSku(name?: string, sku?: string) {
-    if (!name || !name.trim()) {
-      throw new BadRequestException('name is required');
-    }
-    if (!sku || !sku.trim()) {
-      throw new BadRequestException('sku is required');
-    }
   }
 
 }

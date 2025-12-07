@@ -1,0 +1,41 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/@prisma/master-client"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("MASTER_DATABASE_URL")
+}
+
+model Tenant {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique
+  name        String
+  databaseUrl String
+  users       User[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  tenantId     Int
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  email        String
+  passwordHash String
+  role         String   @default("USER")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([tenantId, email])
+}
+
+model SecureConfig {
+  id         Int      @id @default(autoincrement())
+  key        String   @unique
+  iv         String
+  ciphertext String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}

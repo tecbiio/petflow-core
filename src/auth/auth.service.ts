@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnModuleInit, UnauthorizedException } from '@nestjs/common';
-import { Tenant, User } from '@prisma/client';
+import { Tenant, User } from '@prisma/master-client';
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'crypto';
 import type { Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service';

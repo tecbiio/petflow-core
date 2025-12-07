@@ -1,138 +1,60 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Petflow Core (API)
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+API NestJS + Prisma/SQLite avec séparation des bases (master vs données métiers) et bootstrap multi-tenant.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Architecture rapide
+- `MASTER_DATABASE_URL` : base master (Tenant, User, SecureConfig) générant le client `@prisma/master-client`.
+- `DATABASE_URL` : base applicative pour un tenant (produits, familles/sous-familles, conditionnements, mouvements, inventaires, réglages).
+- Script `npm run tenants:bootstrap` : applique les schémas, upsert le tenant + l’admin dans la master et crée l’emplacement par défaut dans la base applicative.
 
-## Description
+## Prérequis
+- Node 20+, npm, SQLite (fichiers `.db`).
+- Variables essentielles (exemple) :
+  ```
+  MASTER_DATABASE_URL=file:/abs/path/petflow-core/prisma/master.db
+  DATABASE_URL=file:/abs/path/petflow-core/prisma/acme.db
+  PDF_SERVICE_URL=http://localhost:8000/parse
+  AUTH_TOKEN_SECRET=change-me
+  FRONTEND_ORIGIN=http://localhost:5173
+  ```
+- Dépendances : `npm install`
 
-Backend NestJS + Prisma (SQLite) avec produits, stocks, inventaires et mouvements.
+## Démarrage
+- Dev : `npm run start:dev`
+- Prod local : `npm run build && MASTER_DATABASE_URL=... DATABASE_URL=... npm run start:prod`
+- Lint/tests : `npm run lint`, `npm run test`, `npm run test:e2e`
 
-## Prisma & données
+## Prisma & bases
+- Générer les clients :
+  ```
+  npx prisma generate                               # client app (schema.prisma)
+  npx prisma generate --schema=prisma/master.prisma # client master
+  ```
+- Schéma master (pas de migrations versionnées) :
+  ```
+  MASTER_DATABASE_URL=file:/abs/path/petflow-core/prisma/master.db \
+  npx prisma db push --schema=prisma/master.prisma
+  ```
+- Migrations app/tenant :
+  ```
+  DATABASE_URL=file:/abs/path/petflow-core/prisma/acme.db \
+  npx prisma migrate deploy --schema=prisma/schema.prisma
+  # ou db push pour un test rapide : npx prisma db push --schema=prisma/schema.prisma
+  ```
+- Seed app : `DATABASE_URL=... npx ts-node prisma/seed.ts`
 
-- `.env` pointe vers `DATABASE_URL="file:./dev.db"`.
-- Migrations : `npm run prisma:migrate` (puis `npx prisma generate` si besoin).
-- Seed de données : `npm run prisma:seed`.
-- Vérification CLI produits : `npm run products:cli`.
-
-## API principales (REST)
-
-Produits  
-- `GET /products` : liste des produits.  
-- `GET /products/:id` : détail produit.
-- `PUT /products` : création (name, sku, price, description?).  
-- `PATCH /products/:id` : mise à jour partielle (name?, sku?, price?, description?, isActive?, axonautProductId?).
-
-Stock locations  
-- `GET /stock-locations` : liste.  
-- `GET /stock-locations/:id` : détail.  
-- `GET /stock-locations/default` : localisation par défaut (`isDefault=true`).
-- `PUT /stock-locations` : création (name, code, isDefault?, isActive?).  
-- `PATCH /stock-locations/:id` : mise à jour partielle (name?, code?, isDefault?, isActive?).
-
-Stock movements  
-- `GET /stock-movements/product/:productId`  
-- `GET /stock-movements/stock-location/:stockLocationId`  
-- `GET /stock-movements/date/:date` (date ISO, journée entière).  
-- `PUT /stock-movements` : crée un mouvement (productId, stockLocationId, quantityDelta, reason?, createdAt?).  
-- `POST /stock-movements/bulk` : crée plusieurs mouvements en une fois (tableau des mêmes payloads).
-
-Inventaires  
-- `GET /inventories/product/:productId`  
-- `GET /inventories/stock-location/:stockLocationId`  
-- `GET /inventories/date/:date`
-- `PUT /inventories` : création d'un inventaire (productId, stockLocationId, quantity, createdAt?).
-
-Stock (calculé à la volée)  
-- `GET /stock/:productId` : stock courant (dernier inventaire + mouvements après, ou somme des mouvements si aucun inventaire).  
-- `GET /stock/:productId/at/:date` : stock à une date.  
-- `GET /stock/:productId/variations` : mouvements du produit (ordre décroissant).
-
-## Project setup
-
-```bash
-$ npm install
+## Bootstrap d’un tenant + admin
 ```
-
-## Compile and run the project
-
-```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+DATABASE_URL=file:/abs/path/petflow-core/prisma/acme.db \
+MASTER_DATABASE_URL=file:/abs/path/petflow-core/prisma/master.db \
+npm run tenants:bootstrap -- \
+  --code=acme --name="ACME" \
+  --dbUrl=file:/abs/path/petflow-core/prisma/acme.db \
+  --email=admin@acme.com --password=Mot2Passe! \
+  --locationCode=MAIN --locationName="Entrepôt principal"
 ```
+Effets : schéma master appliqué, migrations app sur `dbUrl`, tenant + admin créés/mis à jour dans la master, emplacement par défaut upsert dans la base applicative.
 
-## Run tests
-
-```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
-```
-
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+## Services externes
+- Parser PDF (`pdf2json`) consommé via `PDF_SERVICE_URL` (défaut `http://localhost:8000/parse`).
+- Le front (`petflow-app`) pointe par défaut sur `http://localhost:3000`.

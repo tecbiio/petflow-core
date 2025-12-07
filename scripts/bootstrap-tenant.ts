@@ -1,6 +1,7 @@
 #!/usr/bin/env ts-node
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
+import { PrismaClient as MasterPrismaClient } from '@prisma/master-client';
 import { execSync } from 'child_process';
 import path from 'path';
 import { randomBytes, scryptSync } from 'crypto';
@@ -74,7 +75,7 @@ async function ensureMigrations(dbUrl: string) {
 
 async function main() {
   const args = parseArgs();
-  const masterUrl = resolveDbUrl(process.env.DATABASE_URL || '');
+  const masterUrl = resolveDbUrl(process.env.MASTER_DATABASE_URL || '');
   const tenantUrl = resolveDbUrl(args.dbUrl);
 
   console.log(`> Bootstrap tenant "${args.code}"`);
@@ -83,14 +84,29 @@ async function main() {
   if (!masterUrl) {
     throw new Error('DATABASE_URL (master) n’est pas défini dans l’environnement');
   }
-  console.log('> Migrations master (DATABASE_URL)');
-  await ensureMigrations(masterUrl);
+  console.log('> Migrations master (MASTER_DATABASE_URL)');
+  try {
+    execSync(`npx prisma migrate deploy --schema prisma/master.prisma`, {
+      stdio: 'inherit',
+      env: { ...process.env, MASTER_DATABASE_URL: masterUrl },
+    });
+  } catch (err) {
+    console.warn('> migrate deploy master a échoué, tentative db push…');
+    try {
+      execSync(`npx prisma db push --schema prisma/master.prisma --skip-generate`, {
+        stdio: 'inherit',
+        env: { ...process.env, MASTER_DATABASE_URL: masterUrl },
+      });
+    } catch {
+      console.warn('> db push master a échoué, on continue.');
+    }
+  }
 
   // 2) Migrations base tenant
   console.log('> Migrations tenant DB');
   await ensureMigrations(tenantUrl);
 
-  const master = new PrismaClient({ datasources: { db: { url: masterUrl } } });
+  const master = new MasterPrismaClient({ datasources: { db: { url: masterUrl } } });
   const tenantClient = new PrismaClient({ datasources: { db: { url: tenantUrl } } });
 
   const tenant = await master.tenant.upsert({
