@@ -12,7 +12,7 @@ API NestJS + Prisma/SQLite avec séparation des bases (master vs données métie
 - Variables essentielles (exemple) :
   ```
   MASTER_DATABASE_URL=file:/abs/path/petflow-core/prisma/master.db
-  DATABASE_URL=file:/abs/path/petflow-core/prisma/acme.db
+  DATABASE_URL=file:/abs/path/petflow-core/prisma/dev.db
   PDF_SERVICE_URL=http://localhost:8000/parse
   AUTH_TOKEN_SECRET=change-me
   FRONTEND_ORIGIN=http://localhost:5173
@@ -37,7 +37,7 @@ API NestJS + Prisma/SQLite avec séparation des bases (master vs données métie
   ```
 - Migrations app/tenant :
   ```
-  DATABASE_URL=file:/abs/path/petflow-core/prisma/acme.db \
+  DATABASE_URL=file:/abs/path/petflow-core/prisma/dev.db \
   npx prisma migrate deploy --schema=prisma/schema.prisma
   # ou db push pour un test rapide : npx prisma db push --schema=prisma/schema.prisma
   ```
@@ -45,12 +45,12 @@ API NestJS + Prisma/SQLite avec séparation des bases (master vs données métie
 
 ## Bootstrap d’un tenant + admin
 ```
-DATABASE_URL=file:/abs/path/petflow-core/prisma/acme.db \
+DATABASE_URL=file:/abs/path/petflow-core/prisma/dev.db \
 MASTER_DATABASE_URL=file:/abs/path/petflow-core/prisma/master.db \
 npm run tenants:bootstrap -- \
-  --code=acme --name="ACME" \
-  --dbUrl=file:/abs/path/petflow-core/prisma/acme.db \
-  --email=admin@acme.com --password=Mot2Passe! \
+  --code=dev --name="DEV" \
+  --dbUrl=file:/abs/path/petflow-core/prisma/dev.db \
+  --email=admin@dev.com --password=Mot2Passe! \
   --locationCode=MAIN --locationName="Entrepôt principal"
 ```
 Effets : schéma master appliqué, migrations app sur `dbUrl`, tenant + admin créés/mis à jour dans la master, emplacement par défaut upsert dans la base applicative.

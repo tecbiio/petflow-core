@@ -31,4 +31,9 @@ export class AxonautController {
   testRequest(@Body() dto: AxonautTestRequestDto) {
     return this.axonautService.testRequest(dto);
   }
+
+  @Post('import-products')
+  importProducts() {
+    return this.axonautService.importProducts();
+  }
 }

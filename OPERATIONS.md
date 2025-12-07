@@ -2,7 +2,7 @@
 
 ## Variables et chemins (SQLite)
 - `MASTER_DATABASE_URL` : base master (Tenant, User, SecureConfig) – ex. `file:/abs/path/petflow-core/prisma/master.db`
-- `DATABASE_URL` : base applicative d’un tenant – ex. `file:/abs/path/petflow-core/prisma/acme.db`
+- `DATABASE_URL` : base applicative d’un tenant – ex. `file:/abs/path/petflow-core/prisma/dev.db`
 - Utilise des chemins absolus (`file:/abs/path/...`) pour éviter les surprises selon le répertoire courant.
 
 ## Générer les clients Prisma
@@ -28,11 +28,11 @@ Crée ou met à jour le tenant dans la master, applique les migrations sur la ba
 ```bash
 cd petflow-core
 MASTER_DATABASE_URL=file:/abs/path/petflow-core/prisma/master.db \
-DATABASE_URL=file:/abs/path/petflow-core/prisma/acme.db \
+DATABASE_URL=file:/abs/path/petflow-core/prisma/dev.db \
 npm run tenants:bootstrap -- \
-  --code=acme --name="ACME" \
-  --dbUrl=file:/abs/path/petflow-core/prisma/acme.db \
-  --email=admin@acme.com --password=Mot2Passe! \
+  --code=dev --name="DEV" \
+  --dbUrl=file:/abs/path/petflow-core/prisma/dev.db \
+  --email=admin@dev.com --password=Mot2Passe! \
   --locationCode=MAIN --locationName="Entrepôt principal"
 ```
 - Relancer la même commande mettra simplement à jour le tenant et l’utilisateur (upsert).
@@ -48,7 +48,7 @@ DATABASE_URL=... npx ts-node prisma/seed.ts
 ```bash
 sqlite3 prisma/master.db "select id, code, databaseUrl from Tenant;"
 sqlite3 prisma/master.db "select id, email, role, tenantId from User;"
-sqlite3 prisma/acme.db "select id, name, sku from Product limit 5;"
+sqlite3 prisma/dev.db "select id, name, sku from Product limit 5;"
 ```
 
 ## Réinitialiser les données locales

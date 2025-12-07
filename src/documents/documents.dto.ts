@@ -12,6 +12,11 @@ export type ParsedLine = {
   axonautProductCode?: string;
   axonautProductName?: string;
   axonautProductPrice?: number;
+  axonautTaxRate?: number;
+  axonautPurchasePrice?: number;
+  axonautPackaging?: string;
+  axonautPriceVdiHt?: number;
+  axonautPriceDistributorHt?: number;
 };
 
 export class IngestDocumentDto {

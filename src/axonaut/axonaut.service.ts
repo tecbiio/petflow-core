@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { AxonautConfigDto, AxonautLookupDto, AxonautTestRequestDto, AxonautUpdateStockDto } from './axonaut.dto';
 import { SecureConfigService } from '../common/secure-config.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 type AxonautConfig = AxonautConfigDto;
 type ResolvedConfig = {
@@ -14,6 +16,11 @@ export type AxonautProduct = {
   code?: string;
   name?: string;
   price?: number;
+  taxRate?: number;
+  purchasePrice?: number;
+  packaging?: string;
+  priceVdiHt?: number;
+  priceDistributorHt?: number;
   raw?: unknown;
 };
 
@@ -22,7 +29,10 @@ export class AxonautService {
   private readonly logger = new Logger(AxonautService.name);
   private config: ResolvedConfig | null = null;
 
-  constructor(private readonly secureConfig: SecureConfigService) {}
+  constructor(
+    private readonly secureConfig: SecureConfigService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   setConfig(dto: AxonautConfigDto) {
     if (!dto.apiKey || !dto.apiKey.trim()) {
@@ -251,8 +261,19 @@ export class AxonautService {
     const code = this.extractCode(raw);
     const name = this.extractName(raw);
     const price = this.extractPrice(raw);
+    const taxRate = this.extractNumber(raw, ['tax_rate', 'taxRate']);
+    const purchasePrice = this.extractNumber(raw, ['job_costing', 'purchase_price', 'buy_price', 'prix_achat']);
+    const packaging = this.extractString(raw, ['conditionnement', 'packaging', 'condition', 'conditionnement_nom']);
+    const priceVdiHt = this.extractNumber(raw, ['tarif_vdi', 'tarif_vdi_ht', 'price_vdi', 'price_vdi_ht']);
+    const priceDistributorHt = this.extractNumber(raw, [
+      'tarif_distributeur',
+      'tarif_distributeur_ht',
+      'price_distributor',
+      'price_distributeur_ht',
+    ]);
+
     if (!id && !code && !name) return null;
-    return { id, code, name, price, raw };
+    return { id, code, name, price, taxRate, purchasePrice, packaging, priceVdiHt, priceDistributorHt, raw };
   }
 
   private extractCode(product: any): string | undefined {
@@ -280,12 +301,26 @@ export class AxonautService {
   }
 
   private extractPrice(product: any): number | undefined {
-    const candidates = ['price', 'sale_price', 'unit_price', 'amount', 'amount_ht', 'price_ht'];
+    return this.extractNumber(product, ['price', 'sale_price', 'unit_price', 'amount', 'amount_ht', 'price_ht']);
+  }
+
+  private extractNumber(product: any, candidates: string[]): number | undefined {
     for (const key of candidates) {
       const raw = product?.[key];
       if (raw === undefined || raw === null) continue;
       const num = typeof raw === 'number' ? raw : Number(String(raw).replace(',', '.'));
       if (Number.isFinite(num)) return num;
+    }
+    return undefined;
+  }
+
+  private extractString(product: any, candidates: string[]): string | undefined {
+    for (const key of candidates) {
+      const raw = product?.[key];
+      if (typeof raw === 'string') {
+        const trimmed = raw.trim();
+        if (trimmed) return trimmed;
+      }
     }
     return undefined;
   }
@@ -416,5 +451,116 @@ export class AxonautService {
       }
     }
     return undefined;
+  }
+
+  /**
+   * Importe le catalogue Axonaut et met à jour/ajoute les produits locaux (prix HT, TVA, achat, conditionnement, tarifs VDI/distributeur).
+   */
+  async importProducts() {
+    const catalog = await this.fetchProductsCatalog();
+    const prisma = this.prisma.client();
+    let created = 0;
+    let updated = 0;
+    let packagingCreated = 0;
+    const errors: string[] = [];
+
+    for (const item of catalog.products) {
+      try {
+        const sku = this.extractCode(item) ?? this.stringify(item.id) ?? undefined;
+        const name = this.extractName(item) ?? sku ?? 'Produit Axonaut';
+        const axonautId = this.toInt(item.id);
+        if (!sku) {
+          errors.push(`Produit ignoré (pas de code ni d'id) : ${JSON.stringify(item.raw ?? item)}`);
+          continue;
+        }
+        const packagingResult = item.packaging ? await this.ensurePackaging(item.packaging) : undefined;
+        const packagingId = packagingResult?.id;
+        if (packagingResult?.created) packagingCreated += 1;
+        const where: Prisma.ProductWhereInput = {
+          OR: [
+            axonautId ? { axonautProductId: axonautId } : undefined,
+            { sku },
+          ].filter(Boolean) as Prisma.ProductWhereInput[],
+        };
+        const existing = await prisma.product.findFirst({ where });
+
+        const price = this.toNumber(item.price) ?? 0;
+        const productPayload: Prisma.ProductCreateInput = {
+          name,
+          sku,
+          description: null,
+          price,
+          priceSaleHt: price,
+          priceVdiHt: this.toNumber(item.priceVdiHt) ?? 0,
+          priceDistributorHt: this.toNumber(item.priceDistributorHt) ?? 0,
+          purchasePrice: this.toNumber(item.purchasePrice) ?? 0,
+          tvaRate: this.toNumber(item.taxRate) ?? 0,
+          isActive: true,
+          axonautProductId: axonautId ?? null,
+          packaging: packagingId ? { connect: { id: packagingId } } : undefined,
+        };
+
+        if (!existing) {
+          await prisma.product.create({ data: productPayload });
+          created += 1;
+          continue;
+        }
+
+        const updateData: Prisma.ProductUpdateInput = {};
+        if (name && name !== existing.name) updateData.name = name;
+        if (sku && sku !== existing.sku) updateData.sku = sku;
+        if (axonautId && existing.axonautProductId !== axonautId) updateData.axonautProductId = axonautId;
+        updateData.priceSaleHt = price;
+        updateData.price = price;
+        updateData.priceVdiHt = productPayload.priceVdiHt;
+        updateData.priceDistributorHt = productPayload.priceDistributorHt;
+        updateData.purchasePrice = productPayload.purchasePrice;
+        updateData.tvaRate = productPayload.tvaRate;
+        if (packagingId) {
+          updateData.packaging = { connect: { id: packagingId } };
+        }
+
+        await prisma.product.update({ where: { id: existing.id }, data: updateData });
+        updated += 1;
+      } catch (err) {
+        errors.push(err instanceof Error ? err.message : String(err));
+      }
+    }
+
+    return {
+      total: catalog.products.length,
+      created,
+      updated,
+      packagingCreated,
+      errors,
+    };
+  }
+
+  private toNumber(value: any): number | undefined {
+    if (value === null || value === undefined) return undefined;
+    const parsed = Number(String(value).replace(',', '.'));
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+
+  private toInt(value: any): number | undefined {
+    if (value === null || value === undefined) return undefined;
+    const parsed = Number(value);
+    return Number.isInteger(parsed) ? parsed : undefined;
+  }
+
+  private stringify(value: any): string | undefined {
+    if (value === null || value === undefined) return undefined;
+    const str = String(value).trim();
+    return str || undefined;
+  }
+
+  private async ensurePackaging(name: string): Promise<{ id: number; created: boolean } | undefined> {
+    const normalized = name.trim();
+    if (!normalized) return undefined;
+    const prisma = this.prisma.client();
+    const existing = await prisma.packaging.findUnique({ where: { name: normalized } });
+    if (existing) return { id: existing.id, created: false };
+    const created = await prisma.packaging.create({ data: { name: normalized } });
+    return { id: created.id, created: true };
   }
 }

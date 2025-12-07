@@ -86,7 +86,16 @@ export class DocumentsService {
 
   private async enrichLinesWithAxonaut(lines: ParsedLine[]): Promise<ParsedLine[]> {
     if (!lines || lines.length === 0) return lines;
-    const needsLookup = lines.some((line) => !line.axonautProductId);
+    const needsLookup = lines.some(
+      (line) =>
+        !line.axonautProductId ||
+        line.axonautProductPrice === undefined ||
+        line.axonautTaxRate === undefined ||
+        line.axonautPurchasePrice === undefined ||
+        line.axonautPackaging === undefined ||
+        line.axonautPriceVdiHt === undefined ||
+        line.axonautPriceDistributorHt === undefined,
+    );
     if (!needsLookup) return lines;
     const config = await this.axonautService.getConfig();
     if (!config?.lookupProductsUrlTemplate) return lines;
@@ -97,7 +106,6 @@ export class DocumentsService {
       const index = this.buildCatalogIndex(catalog.products);
 
       return lines.map((line) => {
-        if (line.axonautProductId) return line;
         const key = this.normalizeReference(line.reference);
         if (!key) return line;
         const match = index.get(key);
@@ -112,6 +120,11 @@ export class DocumentsService {
           axonautProductCode: match.code ?? line.axonautProductCode ?? line.reference,
           axonautProductName: match.name ?? line.axonautProductName,
           axonautProductPrice: Number.isFinite(parsedPrice) ? (parsedPrice as number) : line.axonautProductPrice,
+          axonautTaxRate: match.taxRate ?? line.axonautTaxRate,
+          axonautPurchasePrice: match.purchasePrice ?? line.axonautPurchasePrice,
+          axonautPackaging: match.packaging ?? line.axonautPackaging,
+          axonautPriceVdiHt: match.priceVdiHt ?? line.axonautPriceVdiHt,
+          axonautPriceDistributorHt: match.priceDistributorHt ?? line.axonautPriceDistributorHt,
         };
       });
     } catch (err) {
@@ -147,8 +160,9 @@ export class DocumentsService {
     if (!product) return null;
 
     const attach = await this.tryAttachAxonautId(product, axonautId);
+    const merged = await this.mergeAxonautFields(attach.product, line);
     const linkedAxonaut = attach.linked || (created && Boolean(axonautId));
-    return { product: attach.product, created, linkedAxonaut };
+    return { product: merged, created, linkedAxonaut };
   }
 
   private async findExistingProduct(reference?: string, axonautId?: number): Promise<Product | null> {
@@ -172,6 +186,7 @@ export class DocumentsService {
       return null;
     }
     const price = this.pickPrice(line);
+    const packagingId = line.axonautPackaging ? await this.ensurePackaging(line.axonautPackaging) : undefined;
     try {
       const prisma = this.prisma.client();
       return await prisma.product.create({
@@ -180,6 +195,12 @@ export class DocumentsService {
           sku,
           description: line.description ?? null,
           price,
+          priceSaleHt: price,
+          priceVdiHt: line.axonautPriceVdiHt ?? 0,
+          priceDistributorHt: line.axonautPriceDistributorHt ?? 0,
+          purchasePrice: line.axonautPurchasePrice ?? 0,
+          tvaRate: line.axonautTaxRate ?? 0,
+          packaging: packagingId ? { connect: { id: packagingId } } : undefined,
           isActive: true,
           axonautProductId: axonautId ?? null,
         },
@@ -389,5 +410,59 @@ export class DocumentsService {
     } catch {
       return false;
     }
+  }
+
+  private async ensurePackaging(name: string): Promise<number | undefined> {
+    const normalized = name.trim();
+    if (!normalized) return undefined;
+    const prisma = this.prisma.client();
+    const packaging = await prisma.packaging.upsert({
+      where: { name: normalized },
+      update: {},
+      create: { name: normalized },
+    });
+    return packaging.id;
+  }
+
+  /**
+   * Ajoute les infos Axonaut utiles si elles sont présentes et si le produit ne possède pas déjà la donnée.
+   */
+  private async mergeAxonautFields(product: Product, line: ParsedLine): Promise<Product> {
+    const asNumber = (value: any): number | undefined => {
+      if (value === null || value === undefined) return undefined;
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : undefined;
+    };
+    const data: Prisma.ProductUpdateInput = {};
+    const shouldUpdate = (current: number | undefined, incoming?: number) =>
+      incoming !== undefined && incoming !== null && (current === undefined || current === null || current === 0);
+
+    if (shouldUpdate(asNumber(product.priceSaleHt), line.axonautProductPrice)) {
+      data.priceSaleHt = line.axonautProductPrice;
+      data.price = line.axonautProductPrice;
+    }
+    if (shouldUpdate(asNumber(product.priceVdiHt), line.axonautPriceVdiHt)) {
+      data.priceVdiHt = line.axonautPriceVdiHt;
+    }
+    if (shouldUpdate(asNumber(product.priceDistributorHt), line.axonautPriceDistributorHt)) {
+      data.priceDistributorHt = line.axonautPriceDistributorHt;
+    }
+    if (shouldUpdate(asNumber(product.purchasePrice), line.axonautPurchasePrice)) {
+      data.purchasePrice = line.axonautPurchasePrice;
+    }
+    if (shouldUpdate(asNumber(product.tvaRate), line.axonautTaxRate)) {
+      data.tvaRate = line.axonautTaxRate;
+    }
+
+    if (line.axonautPackaging && !product.packagingId) {
+      const packagingId = await this.ensurePackaging(line.axonautPackaging);
+      if (packagingId) {
+        data.packaging = { connect: { id: packagingId } };
+      }
+    }
+
+    if (Object.keys(data).length === 0) return product;
+    const prisma = this.prisma.client();
+    return prisma.product.update({ where: { id: product.id }, data });
   }
 }
