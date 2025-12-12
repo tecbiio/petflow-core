@@ -1,4 +1,5 @@
-import { BadRequestException, Body, Controller, Get, Param, ParseIntPipe, Post, Put, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, ParseIntPipe, Post, Put, Query, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { StockMovement } from '@prisma/client';
 import { StockMovementReason } from '../common/enums/stock-movement-reason.enum';
 import type { CreateStockMovementDto } from './stock-movements.dto';
@@ -63,6 +64,20 @@ export class StockMovementsController {
     }
     const movements = await this.stockMovementsService.createMany(dtos);
     return { created: movements.length, movements };
+  }
+
+  @Get('export/disposals')
+  async exportDisposals(@Res() res: Response) {
+    const buffer = await this.stockMovementsService.exportDisposalsExcel();
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="mouvements_perso_poubelle_don.xlsx"`,
+    );
+    res.send(buffer);
   }
 
   private normalizeReasons(input?: StockMovementReason | StockMovementReason[]): StockMovementReason[] {

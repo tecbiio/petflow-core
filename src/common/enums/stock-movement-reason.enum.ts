@@ -1,8 +1,8 @@
 export enum StockMovementReason {
   FACTURE = 'FACTURE',
   AVOIR = 'AVOIR',
-  PERTE = 'PERTE',
-  CASSE = 'CASSE',
+  PERSO = 'PERSO',
+  POUBELLE = 'POUBELLE',
   DON = 'DON',
   INCONNU = 'INCONNU',
 }

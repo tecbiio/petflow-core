@@ -81,6 +81,7 @@ model StockLocation {
   updatedAt         DateTime  @updatedAt
   stockMovements    StockMovement[]
   inventories       Inventory[]
+  dailyValuations   DailyStockValuation[]
   @@unique([code])
 }
 
@@ -106,4 +107,18 @@ model Inventory {
   quantity          Int
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
+}
+
+model DailyStockValuation {
+  id              Int       @id @default(autoincrement())
+  valuationDate   DateTime
+  scopeKey        String
+  stockLocationId Int?
+  stockLocation   StockLocation? @relation(fields: [stockLocationId], references: [id])
+  totalValueCts   Int
+  currency        String    @default("EUR")
+  computedAt      DateTime  @default(now())
+
+  @@unique([valuationDate, scopeKey])
+  @@index([stockLocationId])
 }

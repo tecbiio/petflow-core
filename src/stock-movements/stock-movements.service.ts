@@ -1,4 +1,5 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
+import ExcelJS from 'exceljs';
 import { Prisma, StockMovement } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateStockMovementDto } from './stock-movements.dto';
@@ -76,6 +77,61 @@ export class StockMovementsService {
     );
 
     return created;
+  }
+
+  async exportDisposalsExcel(): Promise<Buffer> {
+    const prisma = this.prisma.client();
+    const reasons = [StockMovementReason.PERSO, StockMovementReason.POUBELLE, StockMovementReason.DON];
+
+    const movements = await prisma.stockMovement.findMany({
+      where: { reason: { in: reasons } },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        product: true,
+        stockLocation: true,
+      },
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Mouvements');
+    sheet.columns = [
+      { header: 'Date', key: 'date', width: 20 },
+      { header: 'Produit', key: 'product', width: 30 },
+      { header: 'SKU', key: 'sku', width: 18 },
+      { header: 'Emplacement', key: 'location', width: 22 },
+      { header: 'Raison', key: 'reason', width: 14 },
+      { header: 'Quantité', key: 'quantity', width: 12 },
+    ];
+
+    const totals = new Map<string, number>();
+    let grandTotal = 0;
+
+    movements.forEach((m) => {
+      const qty = m.quantityDelta;
+      totals.set(m.reason, (totals.get(m.reason) ?? 0) + qty);
+      grandTotal += qty;
+      sheet.addRow({
+        date: new Date(m.createdAt).toLocaleString('fr-FR'),
+        product: m.product?.name ?? `#${m.productId}`,
+        sku: m.product?.sku ?? '',
+        location: m.stockLocation?.name ?? `#${m.stockLocationId}`,
+        reason: m.reason,
+        quantity: qty,
+      });
+    });
+
+    if (movements.length > 0) {
+      sheet.addRow([]);
+      totals.forEach((value, key) => {
+        const row = sheet.addRow(['', '', '', '', `Total ${key}`, value]);
+        row.font = { bold: true };
+      });
+      const totalRow = sheet.addRow(['', '', '', '', 'Total général', grandTotal]);
+      totalRow.font = { bold: true };
+    }
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    return Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
   }
 
   private toCreateInput(dto: CreateStockMovementDto): Prisma.StockMovementCreateInput {

@@ -13,6 +13,7 @@ import { DocumentsModule } from './documents/documents.module';
 import { AuthModule } from './auth/auth.module';
 import { PackagingsModule } from './packagings/packagings.module';
 import { FamiliesModule } from './families/families.module';
+import { StockValuationsModule } from './stock-valuations/stock-valuations.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { FamiliesModule } from './families/families.module';
     DocumentsModule,
     PackagingsModule,
     FamiliesModule,
+    StockValuationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
