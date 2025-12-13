@@ -1,6 +1,7 @@
 export type UpsertProductDto = {
   name: string;
   sku: string;
+  stockThreshold?: number;
   description?: string | null;
   price: number;
   priceVdiHt: number;

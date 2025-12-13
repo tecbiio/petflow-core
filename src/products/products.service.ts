@@ -68,6 +68,7 @@ export class ProductsService {
     return {
       name: dto.name.trim(),
       sku: dto.sku.trim(),
+      stockThreshold: dto.stockThreshold ?? 0,
       description: dto.description ?? null,
       price: salePrice,
       priceSaleHt: salePrice,
@@ -87,6 +88,7 @@ export class ProductsService {
 
     if (dto.name !== undefined) data.name = dto.name.trim();
     if (dto.sku !== undefined) data.sku = dto.sku.trim();
+    if (dto.stockThreshold !== undefined) data.stockThreshold = dto.stockThreshold;
     if (dto.priceSaleHt !== undefined) {
       data.priceSaleHt = dto.priceSaleHt;
       data.price = dto.priceSaleHt;

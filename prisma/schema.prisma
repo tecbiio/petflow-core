@@ -20,6 +20,7 @@ model Product {
   packagingId       Int?
   packaging         Packaging? @relation(fields: [packagingId], references: [id])
   sku               String
+  stockThreshold    Int       @default(0)
   isActive          Boolean   @default(true)
   axonautProductId  Int?
   familyId          Int?

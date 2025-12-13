@@ -139,6 +139,9 @@ export class AuthService implements OnModuleInit {
     if (explicit) {
       return Buffer.from(explicit, 'utf-8');
     }
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('AUTH_TOKEN_SECRET manquant en production.');
+    }
     const random = randomBytes(32);
     this.logger.warn('AUTH_TOKEN_SECRET non défini : clé éphémère générée (les sessions expireront au redémarrage).');
     return random;

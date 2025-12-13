@@ -4,10 +4,10 @@ WORKDIR /app
 FROM base AS deps
 COPY package.json package-lock.json ./
 RUN npm ci
+COPY prisma ./prisma
+RUN npx prisma generate --schema=prisma/schema.prisma && npx prisma generate --schema=prisma/master.prisma
 
 FROM deps AS build
-COPY prisma ./prisma
-RUN npx prisma generate
 COPY . .
 RUN npm run build
 

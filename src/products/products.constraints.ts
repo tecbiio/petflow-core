@@ -66,6 +66,17 @@ export function normalizeProductPayload(dto: ProductConstraintInput, options: No
   numericField((dto as any).purchasePrice, 'purchasePrice');
   numericField((dto as any).tvaRate, 'tvaRate');
 
+  if ((dto as any).stockThreshold !== undefined) {
+    const value = (dto as any).stockThreshold;
+    if (!Number.isInteger(value)) {
+      errors.push('stockThreshold must be an integer');
+    } else if (value < 0) {
+      errors.push('stockThreshold must be >= 0');
+    } else {
+      (cleaned as any).stockThreshold = value;
+    }
+  }
+
   if (dto.description !== undefined) {
     cleaned.description = dto.description ?? null;
   }

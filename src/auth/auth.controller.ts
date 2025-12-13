@@ -1,7 +1,8 @@
-import { BadRequestException, Body, Controller, Get, Post, Req, Res } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Post, Req, Res, UseGuards } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { Public } from '../common/auth/public.decorator';
 import { AuthService, TokenPayload } from './auth.service';
+import { LoginRateLimitGuard } from './login-rate-limit.guard';
 
 type LoginDto = {
   email?: string;
@@ -15,6 +16,7 @@ export class AuthController {
 
   @Post('login')
   @Public()
+  @UseGuards(LoginRateLimitGuard)
   async login(@Body() body: LoginDto, @Res({ passthrough: true }) res: Response) {
     if (!body?.email || !body?.password) {
       throw new BadRequestException('email et password sont requis');
