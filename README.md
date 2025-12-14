@@ -58,3 +58,16 @@ Effets : schéma master appliqué, migrations app sur `dbUrl`, tenant + admin cr
 ## Services externes
 - Parser PDF (`pdf2json`) consommé via `PDF_SERVICE_URL` (défaut `http://localhost:8000/parse`).
 - Le front (`petflow-app`) pointe par défaut sur `http://localhost:3000`.
+
+## Axonaut
+Une clé API Axonaut est stockée côté core via `SecureConfig` (env. `AUTH_TOKEN_SECRET` / `SECRET_KEY_32B` requis).
+
+Endpoints principaux :
+- `POST /axonaut/config` : enregistre la clé (`userApiKey`).
+- `POST /axonaut/import-products` : importe/maj le catalogue produits Axonaut vers Petflow.
+- `POST /axonaut/sync-stock` : synchronise le stock Axonaut depuis le stock calculé Petflow (ids produits).
+- `POST /axonaut/invoices/sync` : synchronise (incrémentalement) les factures Axonaut et les stocke en “à importer”.
+- `GET /axonaut/invoices/pending` : liste des factures synchronisées non importées (utilisé par le front).
+- `POST /axonaut/invoices/mark-imported` : retire des factures de la liste “à importer” après import.
+- `GET /axonaut/invoices` : liste brute des factures Axonaut (debug).
+- `GET /axonaut/invoices/:invoiceId/lines` : lignes de facture Axonaut (références + quantités).

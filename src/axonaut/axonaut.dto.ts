@@ -22,3 +22,18 @@ export class AxonautTestRequestDto {
   method?: 'GET' | 'POST' | 'PATCH';
   body?: unknown;
 }
+
+export class AxonautSyncStockDto {
+  productIds: number[];
+  reason?: string;
+  dryRun?: boolean;
+}
+
+export class AxonautSyncInvoicesDto {
+  lookbackDays?: number;
+  force?: boolean;
+}
+
+export class AxonautMarkInvoicesImportedDto {
+  invoiceIds: string[];
+}

@@ -45,6 +45,22 @@ export class DocumentsService {
       throw new Error('Aucun emplacement de stock par défaut trouvé.');
     }
 
+    const sourceDocumentId = dto.sourceDocumentId?.trim() || undefined;
+    const createdAt = dto.createdAt ? new Date(dto.createdAt) : undefined;
+    if (dto.createdAt && (!createdAt || isNaN(createdAt.getTime()))) {
+      throw new Error('createdAt invalide (attendu: date ISO ou YYYY-MM-DD)');
+    }
+
+    if (sourceDocumentId) {
+      const already = await prisma.stockMovement.findFirst({
+        where: { sourceDocumentType: dto.docType, sourceDocumentId },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (already) {
+        return { created: 0, skipped: [], productsCreated: 0, productsLinked: 0, alreadyImported: true };
+      }
+    }
+
     const lines = await this.enrichLinesWithAxonaut(dto.lines);
     const createdMovements: Prisma.StockMovementCreateManyInput[] = [];
     const skipped: { reference: string; reason: string }[] = [];
@@ -65,7 +81,8 @@ export class DocumentsService {
       if (resolution.created) productsCreated += 1;
       if (resolution.linkedAxonaut) productsLinked += 1;
 
-      const delta = this.deltaFromDocType(dto.docType, line.quantity, dto.movementSign);
+      const safeQuantity = Number.isFinite(line.quantity) ? Math.round(line.quantity) : 0;
+      const delta = this.deltaFromDocType(dto.docType, safeQuantity, dto.movementSign);
       const movementReason = this.reasonFromDocType(dto.docType);
       createdMovements.push({
         productId: resolution.product.id,
@@ -73,7 +90,8 @@ export class DocumentsService {
         quantityDelta: delta,
         reason: movementReason,
         sourceDocumentType: dto.docType,
-        sourceDocumentId: dto.sourceDocumentId,
+        sourceDocumentId,
+        createdAt,
       });
     }
 

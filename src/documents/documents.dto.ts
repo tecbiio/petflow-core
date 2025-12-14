@@ -23,6 +23,7 @@ export class IngestDocumentDto {
   docType: DocumentType;
   stockLocationId?: number;
   sourceDocumentId?: string;
+  createdAt?: string;
   movementSign?: 'IN' | 'OUT';
   lines: ParsedLine[];
 }

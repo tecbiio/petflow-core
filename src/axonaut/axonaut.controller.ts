@@ -1,5 +1,13 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
-import { AxonautConfigDto, AxonautLookupDto, AxonautTestRequestDto, AxonautUpdateStockDto } from './axonaut.dto';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import {
+  AxonautConfigDto,
+  AxonautLookupDto,
+  AxonautMarkInvoicesImportedDto,
+  AxonautSyncStockDto,
+  AxonautSyncInvoicesDto,
+  AxonautTestRequestDto,
+  AxonautUpdateStockDto,
+} from './axonaut.dto';
 import { AxonautService } from './axonaut.service';
 
 @Controller('axonaut')
@@ -22,6 +30,11 @@ export class AxonautController {
     return this.axonautService.updateStock(dto);
   }
 
+  @Post('sync-stock')
+  syncStock(@Body() dto: AxonautSyncStockDto) {
+    return this.axonautService.syncStock(dto);
+  }
+
   @Post('lookup')
   lookup(@Body() dto: AxonautLookupDto) {
     return this.axonautService.lookup(dto);
@@ -35,5 +48,35 @@ export class AxonautController {
   @Post('import-products')
   importProducts() {
     return this.axonautService.importProducts();
+  }
+
+  @Get('invoices')
+  listInvoices(@Query('limit') limit?: string, @Query('from') from?: string, @Query('to') to?: string) {
+    const parsedLimit = limit ? Number(limit) : undefined;
+    return this.axonautService.listInvoices({
+      limit: Number.isFinite(parsedLimit) ? (parsedLimit as number) : undefined,
+      from,
+      to,
+    });
+  }
+
+  @Get('invoices/:invoiceId/lines')
+  invoiceLines(@Param('invoiceId') invoiceId: string) {
+    return this.axonautService.getInvoiceLines(invoiceId);
+  }
+
+  @Post('invoices/sync')
+  syncInvoices(@Body() dto: AxonautSyncInvoicesDto) {
+    return this.axonautService.syncInvoices(dto);
+  }
+
+  @Get('invoices/pending')
+  pendingInvoices() {
+    return this.axonautService.getPendingInvoices();
+  }
+
+  @Post('invoices/mark-imported')
+  markInvoicesImported(@Body() dto: AxonautMarkInvoicesImportedDto) {
+    return this.axonautService.markInvoicesImported(dto);
   }
 }
