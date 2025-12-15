@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import {
   AxonautConfigDto,
+  AxonautClearPendingInvoicesDto,
   AxonautLookupDto,
   AxonautMarkInvoicesImportedDto,
   AxonautSyncStockDto,
@@ -73,6 +74,11 @@ export class AxonautController {
   @Get('invoices/pending')
   pendingInvoices() {
     return this.axonautService.getPendingInvoices();
+  }
+
+  @Post('invoices/clear-pending')
+  clearPendingInvoices(@Body() dto: AxonautClearPendingInvoicesDto) {
+    return this.axonautService.clearPendingInvoices(dto);
   }
 
   @Post('invoices/mark-imported')

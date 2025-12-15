@@ -37,3 +37,10 @@ export class AxonautSyncInvoicesDto {
 export class AxonautMarkInvoicesImportedDto {
   invoiceIds: string[];
 }
+
+export class AxonautClearPendingInvoicesDto {
+  /**
+   * Par défaut, on avance lastSyncAt à maintenant pour éviter que les mêmes factures reviennent au prochain sync.
+   */
+  advanceLastSyncAt?: boolean;
+}

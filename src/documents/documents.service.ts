@@ -61,7 +61,8 @@ export class DocumentsService {
       }
     }
 
-    const lines = await this.enrichLinesWithAxonaut(dto.lines);
+    const isAxonautDocumentImport = Boolean(sourceDocumentId?.startsWith('axonaut:'));
+    const lines = isAxonautDocumentImport ? dto.lines : await this.enrichLinesWithAxonaut(dto.lines);
     const createdMovements: Prisma.StockMovementCreateManyInput[] = [];
     const skipped: { reference: string; reason: string }[] = [];
     let productsCreated = 0;

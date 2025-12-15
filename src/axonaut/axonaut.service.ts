@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
   AxonautConfigDto,
+  AxonautClearPendingInvoicesDto,
   AxonautLookupDto,
   AxonautMarkInvoicesImportedDto,
   AxonautSyncStockDto,
@@ -513,6 +514,34 @@ export class AxonautService {
       blockedUntil: effectiveBlockedUntil,
       pending: state.invoices?.length ?? 0,
       invoices: state.invoices ?? [],
+    };
+  }
+
+  async clearPendingInvoices(dto?: AxonautClearPendingInvoicesDto) {
+    const previous = await this.loadInvoiceSyncState();
+    const now = new Date();
+    const cleared = previous.invoices?.length ?? 0;
+    const advanceLastSyncAt = dto?.advanceLastSyncAt !== false;
+    const nextLastSyncAt = advanceLastSyncAt ? now.toISOString() : previous.lastSyncAt;
+
+    const nextState: AxonautInvoiceSyncState = {
+      lastSyncAt: nextLastSyncAt,
+      blockedUntil: previous.blockedUntil,
+      invoices: [],
+    };
+    await this.saveInvoiceSyncState(nextState);
+
+    const blockedUntil = this.parseOptionalDate(nextState.blockedUntil);
+    const effectiveBlockedUntil =
+      blockedUntil && now.getTime() < blockedUntil.getTime() ? blockedUntil.toISOString() : null;
+
+    return {
+      ok: true,
+      cleared,
+      lastSyncAtAfter: nextState.lastSyncAt ?? null,
+      blockedUntil: effectiveBlockedUntil,
+      pending: 0,
+      invoices: [],
     };
   }
 
