@@ -17,13 +17,13 @@ export class AuthController {
   @Post('login')
   @Public()
   @UseGuards(LoginRateLimitGuard)
-  async login(@Body() body: LoginDto, @Res({ passthrough: true }) res: Response) {
+  async login(@Body() body: LoginDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
     if (!body?.email || !body?.password) {
       throw new BadRequestException('email et password sont requis');
     }
     const session = await this.authService.login(body.email, body.password, body.tenant);
     this.authService.attachAuthCookie(res, session.token, session.payload.exp * 1000);
-    return {
+    const response = {
       user: {
         email: session.payload.sub,
         role: session.payload.role,
@@ -32,6 +32,12 @@ export class AuthController {
       },
       expiresAt: session.payload.exp * 1000,
     };
+    const authModeHeader = req.headers['x-petflow-auth-mode'];
+    const authMode = Array.isArray(authModeHeader) ? authModeHeader[0] : authModeHeader;
+    if (String(authMode ?? '').trim().toLowerCase() === 'bearer') {
+      return { ...response, token: session.token };
+    }
+    return response;
   }
 
   @Post('logout')

@@ -28,6 +28,15 @@ async function bootstrap() {
     .map((origin) => origin.trim())
     .filter((origin) => origin.length > 0);
 
+  if (process.env.DESKTOP === 'true') {
+    const desktopOrigins = ['tauri://localhost', 'https://tauri.localhost'];
+    desktopOrigins.forEach((origin) => {
+      if (!allowedOrigins.includes(origin)) {
+        allowedOrigins.push(origin);
+      }
+    });
+  }
+
   app.enableCors({
     origin: allowedOrigins,
     credentials: true,

@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit, UnauthorizedException } from '@nestjs
 import { Tenant, User } from '@prisma/master-client';
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'crypto';
 import type { Response } from 'express';
+import { PrismaClient } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MasterPrismaService } from '../prisma/master-prisma.service';
 
@@ -247,6 +248,28 @@ export class AuthService implements OnModuleInit {
         tenantId: tenant.id,
       },
     });
+
+    const locationCode = (process.env.AUTH_BOOTSTRAP_LOCATION_CODE ?? 'MAIN').trim().toUpperCase();
+    const locationName = (process.env.AUTH_BOOTSTRAP_LOCATION_NAME ?? 'Emplacement principal').trim();
+
+    try {
+      const tenantPrisma = new PrismaClient({ datasources: { db: { url: tenantDbUrl } } });
+      try {
+        await tenantPrisma.stockLocation.upsert({
+          where: { code: locationCode },
+          update: { name: locationName, isDefault: true, isActive: true },
+          create: { code: locationCode, name: locationName, isDefault: true, isActive: true },
+        });
+        await tenantPrisma.stockLocation.updateMany({
+          where: { code: { not: locationCode }, isDefault: true },
+          data: { isDefault: false },
+        });
+      } finally {
+        await tenantPrisma.$disconnect();
+      }
+    } catch (err) {
+      this.logger.warn(`Création de l'emplacement par défaut échouée: ${err}`);
+    }
 
     this.logger.log(`Tenant "${tenantCode}" et utilisateur admin "${email}" créés (bootstrap). Base: ${tenantDbUrl}`);
   }
