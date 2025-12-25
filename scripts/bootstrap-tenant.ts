@@ -80,26 +80,18 @@ async function main() {
 
   console.log(`> Bootstrap tenant "${args.code}"`);
 
-  // 1) Migrations master (DATABASE_URL)
+  // 1) Schema master (MASTER_DATABASE_URL)
   if (!masterUrl) {
     throw new Error('DATABASE_URL (master) n’est pas défini dans l’environnement');
   }
-  console.log('> Migrations master (MASTER_DATABASE_URL)');
+  console.log('> Schema master (MASTER_DATABASE_URL)');
   try {
-    execSync(`npx prisma migrate deploy --schema prisma/master.prisma`, {
+    execSync(`npx prisma db push --schema prisma/master.prisma --skip-generate`, {
       stdio: 'inherit',
       env: { ...process.env, MASTER_DATABASE_URL: masterUrl },
     });
-  } catch (err) {
-    console.warn('> migrate deploy master a échoué, tentative db push…');
-    try {
-      execSync(`npx prisma db push --schema prisma/master.prisma --skip-generate`, {
-        stdio: 'inherit',
-        env: { ...process.env, MASTER_DATABASE_URL: masterUrl },
-      });
-    } catch {
-      console.warn('> db push master a échoué, on continue.');
-    }
+  } catch {
+    console.warn('> db push master a échoué, on continue.');
   }
 
   // 2) Migrations base tenant

@@ -21,8 +21,8 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "prisma db seed",
-    "products:cli": "ts-node --esm scripts/products-cli.ts",
-    "tenants:bootstrap": "ts-node --esm scripts/bootstrap-tenant.ts"
+    "products:cli": "node -r ts-node/register/transpile-only -r tsconfig-paths/register scripts/products-cli.ts",
+    "tenants:bootstrap": "node -r ts-node/register/transpile-only -r tsconfig-paths/register scripts/bootstrap-tenant.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
