@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { Prisma, StockLocation } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { UpdateStockLocationDto, UpsertStockLocationDto } from './stock-locations.dto';
@@ -7,9 +7,24 @@ import type { UpdateStockLocationDto, UpsertStockLocationDto } from './stock-loc
 export class StockLocationsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(): Promise<StockLocation[]> {
+  async findAll(active?: string): Promise<StockLocation[]> {
     const prisma = this.prisma.client();
-    return prisma.stockLocation.findMany({ orderBy: { createdAt: 'desc' } });
+    const isActive = this.parseActiveFilter(active);
+    const total = await prisma.stockLocation.count();
+    if (total === 0) {
+      await prisma.stockLocation.create({
+        data: {
+          code: 'MAIN',
+          name: 'Entrepot principal',
+          isDefault: true,
+          isActive: true,
+        },
+      });
+    }
+    return prisma.stockLocation.findMany({
+      where: isActive === undefined ? undefined : { isActive },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
   async findOne(id: number): Promise<StockLocation> {
@@ -38,11 +53,19 @@ export class StockLocationsService {
   async create(dto: UpsertStockLocationDto): Promise<StockLocation> {
     const data = this.toCreateInput(dto);
     const prisma = this.prisma.client();
-    const created = await prisma.stockLocation.create({ data });
-    if (created.isDefault) {
-      await this.unsetDefaultExcept(created.id);
+    const hasDefault = (await prisma.stockLocation.count({ where: { isDefault: true } })) > 0;
+    if (!hasDefault) {
+      data.isDefault = true;
     }
-    return created;
+    try {
+      const created = await prisma.stockLocation.create({ data });
+      if (created.isDefault) {
+        await this.unsetDefaultExcept(created.id);
+      }
+      return created;
+    } catch (error) {
+      this.throwIfDuplicateCode(error, data.code);
+    }
   }
 
   async update(id: number, dto: UpdateStockLocationDto): Promise<StockLocation> {
@@ -53,11 +76,15 @@ export class StockLocationsService {
     }
 
     const data = this.toUpdateInput(dto);
-    const updated = await prisma.stockLocation.update({ where: { id }, data });
-    if (updated.isDefault) {
-      await this.unsetDefaultExcept(updated.id);
+    try {
+      const updated = await prisma.stockLocation.update({ where: { id }, data });
+      if (updated.isDefault) {
+        await this.unsetDefaultExcept(updated.id);
+      }
+      return updated;
+    } catch (error) {
+      this.throwIfDuplicateCode(error, dto.code);
     }
-    return updated;
   }
 
   private toCreateInput(dto: UpsertStockLocationDto): Prisma.StockLocationCreateInput {
@@ -109,5 +136,25 @@ export class StockLocationsService {
     if (!code || !code.trim()) {
       throw new BadRequestException('code is required');
     }
+  }
+
+  private parseActiveFilter(active?: string): boolean | undefined {
+    if (!active) return undefined;
+    const normalized = active.trim().toLowerCase();
+    if (['true', '1', 'yes'].includes(normalized)) return true;
+    if (['false', '0', 'no'].includes(normalized)) return false;
+    return undefined;
+  }
+
+  private throwIfDuplicateCode(error: unknown, code?: string): never {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      const target = error.meta?.target;
+      const targets = Array.isArray(target) ? target : target ? [target] : [];
+      if (targets.length === 0 || targets.includes('code')) {
+        const suffix = code ? ` (${code})` : '';
+        throw new ConflictException(`code deja utilise${suffix}`);
+      }
+    }
+    throw error;
   }
 }

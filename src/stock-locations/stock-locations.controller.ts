@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Put } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseIntPipe, Patch, Put, Query } from '@nestjs/common';
 import { StockLocation } from '@prisma/client';
 import type { UpdateStockLocationDto, UpsertStockLocationDto } from './stock-locations.dto';
 import { StockLocationsService } from './stock-locations.service';
@@ -8,8 +8,8 @@ export class StockLocationsController {
   constructor(private readonly stockLocationsService: StockLocationsService) {}
 
   @Get()
-  async list(): Promise<StockLocation[]> {
-    return this.stockLocationsService.findAll();
+  async list(@Query('active') active?: string): Promise<StockLocation[]> {
+    return this.stockLocationsService.findAll(active);
   }
 
   @Get('default')
