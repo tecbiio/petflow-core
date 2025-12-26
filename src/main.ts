@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NextFunction, Request, Response } from 'express';
 import { AppModule } from './app.module';
@@ -8,6 +9,17 @@ async function bootstrap() {
   const expressApp = app.getHttpAdapter().getInstance();
 
   expressApp.disable('x-powered-by');
+  if (process.env.LOG_REQUESTS === 'true') {
+    const httpLogger = new Logger('HTTP');
+    app.use((req: Request, res: Response, next: NextFunction) => {
+      const start = Date.now();
+      res.on('finish', () => {
+        const durationMs = Date.now() - start;
+        httpLogger.log(`${req.method} ${req.originalUrl} ${res.statusCode} ${durationMs}ms`);
+      });
+      next();
+    });
+  }
   if (process.env.TRUST_PROXY === 'true') {
     expressApp.set('trust proxy', 1);
   }
