@@ -25,6 +25,16 @@ npx prisma generate --schema=prisma/master.prisma # client master
 
 ## Bootstrap d un tenant / admin
 Cree ou met a jour le tenant dans la master, applique les migrations sur la base applicative et upsert un admin + un emplacement par defaut.
+Astuce (mot de passe safe vs `!`):
+```bash
+ADMIN_PASSWORD=$(openssl rand -base64 24 | tr -d '\n')
+# Variante si openssl absent:
+# ADMIN_PASSWORD=$(python3 - <<'PY'
+# import secrets
+# print(secrets.token_urlsafe(24))
+# PY
+# )
+```
 ```bash
 cd petflow-core
 MASTER_DATABASE_URL=file:/abs/path/petflow-core/prisma/master.db \
@@ -32,7 +42,7 @@ DATABASE_URL=file:/abs/path/petflow-core/prisma/dev.db \
 npm run tenants:bootstrap -- \
   --code=dev --name="DEV" \
   --dbUrl=file:/abs/path/petflow-core/prisma/dev.db \
-  --email=admin@dev.com --password=Mot2Passe! \
+  --email=admin@dev.com --password="$ADMIN_PASSWORD" \
   --locationCode=MAIN --locationName="Entrepot principal"
 ```
 - Reexecuter la meme commande mettra simplement a jour le tenant et l utilisateur (upsert).
@@ -43,7 +53,7 @@ npm run tenants:bootstrap -- \
 ```bash
 cd petflow-core
 MASTER_DATABASE_URL=file:/abs/path/petflow-core/prisma/master.db \
-npm run users:upsert -- --tenant=dev --email=team@dev.com --password=Mot2Passe! --role=ADMIN
+npm run users:upsert -- --tenant=dev --email=team@dev.com --password="$ADMIN_PASSWORD" --role=ADMIN
 ```
 
 ## Seed ou donnees de test
