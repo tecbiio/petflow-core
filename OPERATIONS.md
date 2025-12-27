@@ -86,3 +86,23 @@ Option: `LOG_REQUESTS=true` dans `petflow-core/.env` pour journaliser chaque req
   docker compose up -d --build
   ```
 - Si le client Prisma master est corrompu, supprimer `petflow-core/node_modules/@prisma/master-client` puis regenerer (`npx prisma generate --schema=prisma/master.prisma`).
+
+## Nettoyer les donnees metier (sans toucher aux comptes)
+Vider la base tenant (produits, mouvements, inventaires, etc) sans modifier `master.db` :
+```bash
+sqlite3 /abs/path/petflow/data/tenant.db <<'SQL'
+PRAGMA foreign_keys=OFF;
+DELETE FROM StockMovement;
+DELETE FROM Inventory;
+DELETE FROM DailyStockValuation;
+DELETE FROM Product;
+DELETE FROM SubFamily;
+DELETE FROM Family;
+DELETE FROM Packaging;
+DELETE FROM StockLocation;
+-- Optionnel: conserver les identifiants externes
+-- DELETE FROM SecureConfig;
+PRAGMA foreign_keys=ON;
+VACUUM;
+SQL
+```
